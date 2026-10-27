@@ -105,7 +105,7 @@ shadow.position.y = -78;
 scene.add(shadow);
 
 // ---------------- 状态 ----------------
-const S = { fold: 0, explode: 0, labels: true, auto: false, scheme: 'white', selected: null, keynote: false };
+const S = { fold: 0, explode: 0, labels: localStorage.getItem('iphoneDuo.labels') !== '0', auto: false, scheme: 'white', selected: null, keynote: false };
 
 function setFold(v) { S.fold = THREE.MathUtils.clamp(v, 0, PI); }
 function setExplode(v) { S.explode = THREE.MathUtils.clamp(v, 0, 1); }
@@ -403,7 +403,8 @@ function bindUI() {
     flyTo(...VIEWS.explode, 2);
   };
   $('#btnAuto').onclick = (e) => { S.auto = !S.auto; e.currentTarget.classList.toggle('active', S.auto); };
-  $('#btnLabels').onclick = (e) => { S.labels = !S.labels; e.currentTarget.classList.toggle('active', S.labels); };
+  $('#btnLabels').onclick = (e) => { S.labels = !S.labels; localStorage.setItem('iphoneDuo.labels', S.labels ? '1' : '0'); e.currentTarget.classList.toggle('active', S.labels); };
+  $('#btnLabels').classList.toggle('active', S.labels);   // 恢复上次选择
   document.querySelectorAll('[data-view]').forEach((b) => (b.onclick = () => { cancelTweens(); flyTo(...VIEWS[b.dataset.view], 1.6); }));
   document.querySelectorAll('.swatch').forEach((b) => (b.onclick = () => setScheme(b.dataset.scheme)));
   $('#btnKeynote').onclick = () => startKeynote();
@@ -420,6 +421,7 @@ function bindUI() {
     if (e.key === 'e' || e.key === 'E') $('#btnExplode').click();
     if ((e.key === 'f' || e.key === 'F') && DEV().hasFold) (S.fold > 1 ? $('#btnOpen') : $('#btnClose')).click();
     if (e.key === 'k' || e.key === 'K') startKeynote();
+    if (e.key === 'l' || e.key === 'L') $('#btnLabels').click();   // 标注 隐藏/显示
   });
 }
 
