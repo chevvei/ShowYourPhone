@@ -214,8 +214,10 @@ function updateLabels() {
   const W = innerWidth, H = innerHeight;
   const on = S.labels && !S.keynote && S.explode > 0.12 && S.fold < 0.2;
   const items = [];
+  // 聚焦特写时只保留选中部件的标注，其余自动淡出，避免遮挡模型；取消选中即恢复全部
+  const selOnly = S.selected && model.parts.some((q) => q.id === S.selected) ? S.selected : null;
   for (const p of model.parts) {
-    let vis = on && p.k > 0.55 && p.fade > 0.5;
+    let vis = on && p.k > 0.55 && p.fade > 0.5 && (!selOnly || p.id === selOnly);
     if (vis) {
       vtmp.copy(p.anchor);
       p.anchorObj.localToWorld(vtmp).project(camera);
