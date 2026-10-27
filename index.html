@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#000000" />
+  <link rel="icon" href="data:," />
+  <title>iPhone Duo · 3D 爆炸图</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- 发布者内置配置（build.py --config 注入；含照片 dataURL，打开即显示发布照片） -->
+  <script type="application/json" id="defaultConfig">{}</script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./node_modules/three/build/three.module.js",
+        "three/addons/": "./node_modules/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body data-scheme="white" data-dev="duo">
+  <canvas id="gl"></canvas>
+  <svg id="leaders" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div id="labels"></div>
+  <div id="tip"></div>
+
+  <header id="top">
+    <div class="brand"><svg viewBox="0 0 17 20" class="logo"><path d="M14.1 10.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9C3.6 4.8 2 5.8 1.1 7.4c-1.8 3.2-.5 7.9 1.3 10.5.9 1.3 1.9 2.7 3.2 2.6 1.3-.1 1.8-.8 3.3-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.1-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-2.7-1-2.7-4.3zM11.6 3c.7-.9 1.2-2 1-3.2-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1 3.1 1.2.1 2.4-.6 3.1-1.5z"/></svg><span id="brandName">iPhone Duo</span></div>
+    <div id="devTabs" title="切换设备">
+      <button data-dev="duo" class="active">Duo</button>
+      <button data-dev="p18s">18</button>
+      <button data-dev="p18">18 Pro</button>
+      <button data-dev="p18m">18 Pro Max</button>
+    </div>
+    <nav>
+      <button data-view="hero">总览</button>
+      <button data-view="front">正面</button>
+      <button data-view="back">背面</button>
+      <button data-view="side">侧面</button>
+      <button data-view="top">顶部</button>
+    </nav>
+    <button id="btnKeynote" class="cta">▶ 发布会演示</button>
+  </header>
+
+  <aside id="parts">
+    <div class="ph">内部结构 <small>点击部件聚焦</small></div>
+    <div id="partsList"></div>
+  </aside>
+
+  <section id="info">
+    <button id="infoClose" aria-label="关闭">×</button>
+    <div id="infoCat"></div>
+    <h2 id="infoName"></h2>
+    <div id="infoEn"></div>
+    <p id="infoSpec"></p>
+  </section>
+
+  <footer id="dock">
+    <div class="slider" id="foldRow">
+      <label>开合角度 <b id="foldVal">180°</b></label>
+      <input id="fold" type="range" min="0" max="180" value="180" />
+    </div>
+    <div class="slider">
+      <label>爆炸程度 <b id="explodeVal">0%</b></label>
+      <input id="explode" type="range" min="0" max="100" value="0" />
+    </div>
+    <div class="slider">
+      <label>聚焦淡化 <b id="dimVal">4%</b></label>
+      <input id="dim" type="range" min="0" max="30" value="4" />
+    </div>
+    <div class="btns">
+      <button id="btnOpen">展开</button>
+      <button id="btnClose">合上</button>
+      <button id="btnExplode">爆炸 / 复原</button>
+      <button id="btnAuto">自动旋转</button>
+      <button id="btnLabels" class="active">标注</button>
+      <button id="btnCustom">✎ 个性化</button>
+      <button id="btnKeynoteM">▶ 发布会演示</button>
+    </div>
+    <div class="views">
+      <button data-view="hero">总览</button>
+      <button data-view="front">正面</button>
+      <button data-view="back">背面</button>
+      <button data-view="side">侧面</button>
+    </div>
+    <div class="swatches">
+      <button class="swatch white active" data-scheme="white" title="星光白"></button>
+      <button class="swatch night" data-scheme="night" title="夜空色"></button>
+    </div>
+  </footer>
+
+  <!-- 个性化定制：鎏金激光雕刻 / 屏保轮播 / 图层 -->
+  <section id="custom">
+    <button id="customClose" aria-label="关闭">×</button>
+    <div class="ph">个性化定制 <small>激光雕刻 · 屏保轮播 · 图层</small></div>
+
+    <div class="sec">鎏金激光雕刻 · 背面</div>
+    <input id="engraveText" type="text" maxlength="14" placeholder="输入雕刻文字（中英文皆可）" autocomplete="off" />
+    <div class="mini-sliders">
+      <div class="slider"><label>横向位置 <b id="engXVal">0</b></label><input id="engX" type="range" min="-17" max="17" value="0" step="1" /></div>
+      <div class="slider"><label>纵向位置 <b id="engYVal">74</b></label><input id="engY" type="range" min="28" max="92" value="74" step="1" /></div>
+    </div>
+    <div class="meta">雕刻层熠熠生辉 · 拖动滑块移动文字位置</div>
+
+    <div class="sec">屏保轮播 <span id="ssTabs"><button data-tgt="outer" class="active">外屏</button><button data-tgt="inner">内屏</button></span></div>
+    <div id="ssThumbs"></div>
+    <div class="row">
+      <label class="upbtn">＋ 上传照片<input id="ssUpload" type="file" accept="image/*" multiple hidden /></label>
+      <button id="ssNext" class="ghost">切换</button>
+      <button id="ssClear" class="ghost">清空</button>
+    </div>
+    <div class="meta"><span id="ssCount">0 张</span> · 照片作为壁纸层，组件始终显示在照片上方</div>
+    <div class="slider"><label>轮播间隔 <b id="ssIntervalVal">8s</b></label><input id="ssInterval" type="range" min="3" max="60" value="8" /></div>
+    <div class="slider"><label>壁纸缩放 <b id="ssScaleVal">100%</b></label><input id="ssScale" type="range" min="100" max="220" value="100" /></div>
+
+    <div class="sec">图层显示</div>
+    <div id="layerToggles">
+      <label><input type="checkbox" data-layer="clock" checked /><span>时钟 · 日期</span></label>
+      <label><input type="checkbox" data-layer="status" checked /><span>状态栏</span></label>
+      <label><input type="checkbox" data-layer="island" checked /><span>灵动岛</span></label>
+      <label><input type="checkbox" data-layer="lock" checked /><span>锁图标</span></label>
+      <label><input type="checkbox" data-layer="cards" checked /><span>信息卡</span></label>
+      <label><input type="checkbox" data-layer="dock" checked /><span>底部控件</span></label>
+      <label><input type="checkbox" data-layer="dim" checked /><span>暗角渐晕</span></label>
+    </div>
+
+    <div class="row">
+      <button id="cfgExport" class="ghost">⤓ 导出配置</button>
+      <button id="cfgImport" class="ghost">⤒ 导入配置</button>
+      <button id="cfgReset" class="ghost">↺ 恢复默认</button>
+      <input id="cfgFile" type="file" accept="application/json,.json" hidden />
+    </div>
+    <div class="meta">文字 / 位置 / 壁纸 / 图层自动保存于本机，导出文件可跨设备迁移</div>
+  </section>
+  <div id="customSaved">已保存 ✓</div>
+
+  <!-- 彩蛋系统：隐藏细节寻宝（角标常驻；工坊入口 = 连点顶部设备名 5 次 / Ctrl+Shift+E） -->
+  <button id="eggBadge" title="隐藏细节寻宝">◈ 0/5</button>
+  <section id="eggs">
+    <button id="eggsClose" aria-label="关闭">×</button>
+    <div class="ph">彩蛋工坊 <small>隐藏细节 · 已找到 <b id="eggProg">0 / 5</b></small></div>
+
+    <div class="sec">寻宝清单 <small>聚焦对应部件即点亮 · 凑近读那行微雕</small></div>
+    <div id="eggList"></div>
+
+    <div class="sec">定制微雕文字</div>
+    <label class="egfield">芯片刻字<input id="egg_chipText" type="text" maxlength="26" placeholder="Designed with ♥ by you" autocomplete="off" /></label>
+    <label class="egfield">电池电码短语（自动编成 Morse）<input id="egg_morseText" type="text" maxlength="18" placeholder="THINK DIFFERENT" autocomplete="off" /></label>
+    <label class="egfield">均热板激光签名<input id="egg_vcText" type="text" maxlength="24" placeholder="Calibrated by Cupertino" autocomplete="off" /></label>
+    <label class="egfield">底边微雕（18 系列）<input id="egg_edgeText" type="text" maxlength="30" placeholder="Designed in California" autocomplete="off" /></label>
+
+    <div class="sec">芯片贴画（轮廓蚀刻）</div>
+    <div class="row">
+      <label class="upbtn">＋ 上传图片<input id="eggImg" type="file" accept="image/*" hidden /></label>
+      <button id="eggImgClear" class="ghost">移除</button>
+      <small id="eggImgName">未上传</small>
+    </div>
+    <div class="meta">图片会转成简易轮廓蚀刻画，烙在主芯片裸片角落 · 放大才能看清</div>
+
+    <div class="row"><button id="eggReset" class="ghost">↺ 重置寻宝进度</button></div>
+    <div class="meta">找齐全部隐藏细节 → 解锁虹彩衍射中框 + 彩带礼花 · 彩蛋进度自动保存于本机</div>
+  </section>
+  <div id="eggToast"></div>
+
+  <div id="caption">
+    <div id="capEyebrow"></div>
+    <h1 id="capTitle"></h1>
+    <p id="capSub"></p>
+  </div>
+  <div id="kbar"><div id="kProgress"></div></div>
+  <div id="kctrl"><span id="kChapter"></span><button id="kExit">退出演示 Esc</button></div>
+
+  <div id="hint">拖拽旋转 · 滚轮缩放 · 右键平移 · E 爆炸 · F 开合 · K 演示</div>
+  <div id="touchHint">左半屏出部件 · 右半屏出控制 · 单指旋转 · 双指缩放</div>
+
+  <div id="loader">
+    <div class="lt">iPhone Duo</div>
+    <div class="lb"><div id="loadBar"></div></div>
+    <div class="ls">正在生成材质与模型…</div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
