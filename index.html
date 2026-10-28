@@ -92,6 +92,11 @@
       <button id="btnCut" title="剖面切面：沿深度切开看内部堆叠 (C)">∪ 剖面</button>
       <button id="btnZen" title="沉浸模式：全屏纯净画面 + 展台自转 (I)">⛶ 沉浸</button>
       <button id="btnShare" title="复制分享链接：打开即还原当前设备/环境/爆炸度">⇗ 分享</button>
+      <button id="btnDaily" title="每日挑战：每天 5 题，答对 3 题打卡，连续记录">☀ 每日</button>
+      <button id="btnBadges" title="图鉴徽章：探索成就墙">♛ 徽章</button>
+      <button id="btnTint" title="换色 DIY：机身实时换色">◉ 换色</button>
+      <button id="btnPower" title="开机序列：按下电源键，看它亮起来">⏻ 开机</button>
+      <button id="btnCard" title="分享卡片：当前视角生成带链接的分享图">▣ 卡片</button>
     </div>
     <div class="views">
       <button data-view="hero">总览</button>
@@ -220,6 +225,32 @@
   <div id="cutBar"><span>∪ 剖面深度</span><input id="cutDepth" type="range" min="0" max="100" value="35" step="1" /><b id="cutPct">35%</b></div>
   <!-- 沉浸模式退出提示：进入后短暂显示，静置淡出 -->
   <div id="zenTip">⛶ 沉浸模式 · 点击任意处或按 Esc 退出</div>
+
+  <!-- 每日挑战：日期种子固定 5 题，答对 3 题打卡 -->
+  <section id="daily">
+    <button id="dailyClose" aria-label="关闭">×</button>
+    <div class="ph">每日挑战 <small>每天 5 题 · 答对 3 题打卡</small></div>
+    <div id="dailyBody"></div>
+    <div class="meta">题目每天 0 点刷新 · 打卡连续天数越长徽章越稀有</div>
+  </section>
+
+  <!-- 图鉴徽章：探索成就墙 -->
+  <section id="badges">
+    <button id="badgesClose" aria-label="关闭">×</button>
+    <div class="ph">图鉴徽章 <small>探索成就 · <b id="badgeCount">0/0</b></small></div>
+    <div id="badgeGrid"></div>
+  </section>
+
+  <!-- 换色 DIY：机身实时换色 -->
+  <section id="tint">
+    <button id="tintClose" aria-label="关闭">×</button>
+    <div class="ph">换色 DIY <small>点一下立刻换色 · 本机记忆</small></div>
+    <div id="tintSwatches"></div>
+    <div class="row"><button id="tintReset" class="ghost">恢复原色</button></div>
+  </section>
+
+  <!-- 开机序列：全屏黑幕 + 亮屏动画 -->
+  <div id="powerOverlay"><div id="powerLogo"></div></div>
   <div id="touchHint">左半屏出部件 · 右半屏出控制 · 单指旋转 · 双指缩放</div>
 
   <div id="loader">

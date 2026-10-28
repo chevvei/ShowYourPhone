@@ -542,6 +542,9 @@ function bindUI() {
       else if ($('#custom').classList.contains('on')) $('#custom').classList.remove('on');
       else if (quiz.on) toggleQuiz(false);
       else if ($('#asm').classList.contains('on')) toggleAsm(false);
+      else if ($('#daily').classList.contains('on')) toggleDaily(false);
+      else if ($('#badges').classList.contains('on')) toggleBadges(false);
+      else if ($('#tint').classList.contains('on')) toggleTint(false);
       else if (ar.on) toggleAR();
       else if (rec.on) toggleRec();
       else selectPart(null);
@@ -1354,6 +1357,9 @@ function switchDevice(dev) {
   // 新玩法互斥退出：答题 / 拆装 / AR 绑定的是旧模型的部件表，切设备必须先收摊
   if (quiz.on) toggleQuiz(false);
   if ($('#asm').classList.contains('on')) toggleAsm(false);
+  if ($('#daily').classList.contains('on')) toggleDaily(false);
+  if ($('#badges').classList.contains('on')) toggleBadges(false);
+  if ($('#tint').classList.contains('on')) toggleTint(false);
   if (ar.on) toggleAR();
   if (phys.on) { phys.on = false; stage.position.set(0, 0, 0); stage.rotation.set(0, 0, 0); }
   if (vis !== 'off') setVisMode('off');   // 旧模型的材质 swap 随旧 root 一起退役
@@ -1394,6 +1400,8 @@ function switchDevice(dev) {
   syncUI();
   if (eggs.fx) model.setFrameIri(true);   // 虹彩中框随设备恢复
   renderEggList();
+  setTint(localStorage.getItem(`iphoneDuo.tint.${dev}`) || 'titan', false);   // 换色随设备恢复
+  buildTintUI();
   model.update(0);
   flyTo(...VIEWS.hero, 1.4);
 }
@@ -1478,6 +1486,7 @@ async function exportWallpaper() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     sfx('shutter'); buzz(12);
+    award('wall');
     toastMsg(`⤓ 已导出 ${DEV().name} 壁纸 ${w}×${h}`);
   } finally {
     renderer.setPixelRatio(pr);
@@ -1555,6 +1564,7 @@ function quizRight() {
     quiz.best = quiz.streak;
     localStorage.setItem('iphoneDuo.quizBest', quiz.best);
   }
+  if (quiz.streak >= 5) award('quiz5');
   sfx('right'); buzz(12);
   quiz.busy = true;
   quizScore();
@@ -1665,6 +1675,7 @@ function asmFinish() {
   if (isRec) localStorage.setItem(asmBestKey(), t);
   asm.on = false;
   $('#btnAsm').classList.remove('active');
+  award('asm');
   sfx('boot'); buzz([18, 60, 18, 60, 36]);
   burstConfetti();
   updateAsmUI(t, isRec);
@@ -1851,6 +1862,8 @@ function setVisMode(mode) {
   key.visible = rim.visible = hemi.visible = vis === 'off';   // 幽灵/线框材质不吃光照，顺手省开销
   $('#btnXray').classList.toggle('active', vis === 'xray');
   $('#btnBlue').classList.toggle('active', vis === 'blueprint');
+  if (vis === 'xray') award('xray');
+  if (vis === 'blueprint') award('blue');
   if (vis !== 'off') { sfx(vis === 'xray' ? 'whoosh' : 'ui'); buzz(8); }
 }
 
@@ -1866,7 +1879,7 @@ function setCut(on) {
   for (const p of model.parts) for (const m of p.mats) m.clippingPlanes = on ? [cutPlane] : null;
   $('#cutBar').classList.toggle('on', on);
   $('#btnCut').classList.toggle('active', on);
-  if (on) { setCutDepth(cut.k); sfx('snap'); buzz(8); }
+  if (on) { setCutDepth(cut.k); sfx('snap'); buzz(8); award('cut'); }
 }
 function setCutDepth(k) {
   cut.k = k;
@@ -1885,6 +1898,7 @@ function toggleZen(force) {
   $('#btnZen').classList.toggle('active', want);
   if (want) {
     sfx('whoosh'); buzz(10);
+    award('zen');
     document.documentElement.requestFullscreen?.().catch(() => {});
     const tip = $('#zenTip');
     tip.classList.add('on');
@@ -1898,7 +1912,7 @@ function toggleZen(force) {
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && zen.on) toggleZen(false); });
 
 // 分享链接：把设备/环境/配色/爆炸度编码进 URL，打开即还原现场
-function shareLink() {
+function buildShareURL() {
   const u = new URL(location.href);
   for (const k of [...u.searchParams.keys()]) u.searchParams.delete(k);
   u.hash = '';
@@ -1906,12 +1920,306 @@ function shareLink() {
   if (curEnv !== 'studio') u.searchParams.set('env', curEnv);
   if (S.scheme !== 'white') u.searchParams.set('sch', S.scheme);
   if (S.explode > 0.02) u.searchParams.set('ex', (+S.explode).toFixed(2));
-  const url = u.toString();
+  return u.toString();
+}
+function shareLink() {
+  const url = buildShareURL();
   (navigator.clipboard?.writeText(url) || Promise.reject()).then(
     () => toastMsg('⇗ 分享链接已复制 · 打开即还原当前状态'),
     () => toastMsg(url));
   sfx('pop'); buzz(8);
+  award('share');
   return url;
+}
+
+// ---------------- 第五波 A：图鉴徽章 · 每日挑战 · 换色 DIY ----------------
+// 徽章系统：探索行为 → award() 解锁 → toast + 徽章墙亮起。
+// 全部存 localStorage，重开页面即恢复；未解锁的灰显（名称保留、描述可见，勾着再来）。
+const BADGES = [
+  { id: 'first',  ic: '🌱', nm: '初来乍到',   ds: '第一次打开这台 3D 手机' },
+  { id: 'xray',   ic: '⊨',  nm: 'X 光医师',   ds: '用 X 光透视内部结构' },
+  { id: 'blue',   ic: '⧉',  nm: '蓝图工程师', ds: '进入工程蓝图模式' },
+  { id: 'cut',    ic: '∪',  nm: '解剖学家',   ds: '用剖面切开手机' },
+  { id: 'zen',    ic: '⛶',  nm: '冥想者',     ds: '在沉浸模式里放空一次' },
+  { id: 'quiz5',  ic: '🎯', nm: '百发百中',   ds: '部件大师连击答对 5 题' },
+  { id: 'asm',    ic: '🔧', nm: '装机大师',   ds: '完整装回一台设备' },
+  { id: 'power',  ic: '⏻',  nm: '见证开机',   ds: '完成一次开机序列' },
+  { id: 'daily1', ic: '☀',  nm: '每日打卡',   ds: '完成一次每日挑战' },
+  { id: 'daily7', ic: '🔥', nm: '七日之约',   ds: '每日挑战连续打卡 7 天' },
+  { id: 'wall',   ic: '🖼', nm: '壁纸收藏家', ds: '导出一张机型原生壁纸' },
+  { id: 'share',  ic: '⇗',  nm: '分享家',     ds: '生成一条分享链接' },
+];
+let badgeStore = {};
+try { badgeStore = JSON.parse(localStorage.getItem('iphoneDuo.badges') || '{}'); } catch { /* 损坏则重建 */ }
+function award(id) {
+  if (badgeStore[id]) return;
+  const b = BADGES.find((x) => x.id === id);
+  if (!b) return;
+  badgeStore[id] = Date.now();
+  localStorage.setItem('iphoneDuo.badges', JSON.stringify(badgeStore));
+  const got = BADGES.filter((x) => badgeStore[x.id]).length;
+  toastMsg(`${b.ic} 解锁徽章「${b.nm}」· ${got}/${BADGES.length}`);
+  sfx('right'); buzz(12);
+  renderBadges(id);
+}
+function renderBadges(popId) {
+  const got = BADGES.filter((x) => badgeStore[x.id]).length;
+  $('#badgeCount').textContent = `${got}/${BADGES.length}`;
+  $('#badgeGrid').innerHTML = '';
+  for (const b of BADGES) {
+    const d = document.createElement('div');
+    d.className = 'bd' + (badgeStore[b.id] ? ' got' : '') + (b.id === popId ? ' pop' : '');
+    d.innerHTML = `<div class="ic">${b.ic}</div><div class="nm">${b.nm}</div><div class="ds">${b.ds}</div>`;
+    $('#badgeGrid').append(d);
+  }
+}
+function toggleBadges(force) {
+  const want = force !== undefined ? force : !$('#badges').classList.contains('on');
+  $('#badges').classList.toggle('on', want);
+  $('#btnBadges').classList.toggle('active', want);
+  if (want) renderBadges();
+}
+
+// 每日挑战：日期做种子 → 同一天全世界题目一样 → 答对 3/5 打卡 → 连续天数。
+// 没达标可以当场重试（题序重新洗），打卡以当天最好成绩为准。
+const daily = { on: false, qs: [], idx: 0, right: 0, ans: '' };
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function dateKey(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function dailyStore() {
+  try { return JSON.parse(localStorage.getItem('iphoneDuo.daily') || '{}'); } catch { return {}; }
+}
+function dailyStreak(s) { return Math.max(1, (s.streak || 0)); }
+function buildDaily() {
+  const rnd = mulberry32(parseInt(dateKey().replaceAll('-', ''), 10) ^ 0x9E3779B9);
+  const pool = [...model.parts];
+  const qs = [];
+  while (qs.length < Math.min(5, pool.length)) {
+    const p = pool[(rnd() * pool.length) | 0];
+    if (!qs.includes(p)) qs.push(p);
+  }
+  // 每题 4 选项：答案 + 3 个干扰（同样由日期种子决定 → 当天固定）
+  return qs.map((p) => {
+    const opts = [p.id];
+    while (opts.length < 4) {
+      const c = pool[(rnd() * pool.length) | 0];
+      if (!opts.includes(c.id)) opts.push(c.id);
+    }
+    return { ans: p.id, opts: opts.sort(() => rnd() - 0.5) };
+  });
+}
+function dailyRender() {
+  const s = dailyStore();
+  if (s.date === dateKey() && s.done) {         // 今日已打卡：展示结算
+    $('#dailyBody').innerHTML = `<div class="done"><div class="big">✅</div>
+      <p>今日挑战完成<br>连续打卡 <b>${dailyStreak(s)}</b> 天</p></div>`;
+    return;
+  }
+  const q = daily.qs[daily.idx];
+  $('#dailyBody').innerHTML = `
+    <div class="prog">第 ${daily.idx + 1} / ${daily.qs.length} 题 · 已答对 ${daily.right} 题（需 3 题）</div>
+    <div class="q">镜头对准的部件是？<small>从 4 个名字里选出它</small></div>
+    <div class="opts">${q.opts.map((id) => `<button data-id="${id}">${model.parts.find((p) => p.id === id).name}</button>`).join('')}</div>`;
+  $('#dailyBody').querySelectorAll('.opts button').forEach((b) => b.onclick = () => dailyAnswer(b.dataset.id, b));
+  quizFly(q.ans);                                 // 复用部件大师的特写飞行
+}
+function dailyAnswer(id, btn) {
+  if (daily.ans) return;
+  daily.ans = id;
+  const right = id === daily.qs[daily.idx].ans;
+  btn.classList.add(right ? 'right' : 'wrong');
+  if (right) { daily.right++; sfx('right'); buzz(12); } else { sfx('wrong'); buzz([26]); }
+  setTimeout(() => {
+    daily.ans = '';
+    daily.idx++;
+    if (daily.idx < daily.qs.length) dailyRender();
+    else dailyFinish();
+  }, right ? 650 : 1100);
+}
+function dailyFinish() {
+  if (daily.right >= 3) {
+    const s = dailyStore();
+    const today = dateKey();
+    const yest = dateKey(new Date(Date.now() - 86400000));
+    const streak = s.date === yest && s.streak ? s.streak + 1 : 1;   // 昨天打过 → 续连击
+    const rec = { date: today, done: 1, streak };
+    localStorage.setItem('iphoneDuo.daily', JSON.stringify(rec));
+    award('daily1');
+    if (streak >= 7) award('daily7');
+    burstConfetti();
+    $('#dailyBody').innerHTML = `<div class="done"><div class="big">🎉</div>
+      <p>打卡成功 · 答对 <b>${daily.right}</b> / ${daily.qs.length} 题<br>连续打卡 <b>${streak}</b> 天</p></div>`;
+    sfx('boot'); buzz([18, 60, 18, 60, 36]);
+  } else {
+    $('#dailyBody').innerHTML = `<div class="done"><div class="big">💪</div>
+      <p>答对 ${daily.right} / ${daily.qs.length} 题，差一点点<br>再试一次，今天还来得及</p></div>
+      <div class="row" style="margin-top:12px"><button id="dailyRetry" class="ghost">再试一次</button></div>`;
+    $('#dailyRetry').onclick = () => { daily.qs = buildDaily(); daily.idx = 0; daily.right = 0; dailyRender(); };
+  }
+}
+function toggleDaily(force) {
+  const want = force !== undefined ? force : !$('#daily').classList.contains('on');
+  $('#daily').classList.toggle('on', want);
+  $('#btnDaily').classList.toggle('active', want);
+  if (want) {
+    const s = dailyStore();
+    const fresh = !(s.date === dateKey() && s.done);
+    if (fresh || daily.idx >= daily.qs.length || !daily.qs.length) {
+      daily.qs = buildDaily(); daily.idx = 0; daily.right = 0;
+    }
+    dailyRender();
+  } else {
+    model.setFocus(null);   // 收回 quizFly 的特写
+  }
+}
+
+// 换色 DIY：机身/背板件 tint 上色（材质 color 覆写），按设备持久化。
+// 首次上色时记录 baseColor，恢复原色零残留；与 X 光/蓝图无冲突（它们 swap 的是材质指针）。
+const TINTS = [
+  { id: 'titan',   nm: '钛原色', hex: null,       css: '#8e959e' },
+  { id: 'black',   nm: '钛黑',   hex: '#2a2c30', css: '#2a2c30' },
+  { id: 'star',    nm: '星光白', hex: '#e8e4da', css: '#e8e4da' },
+  { id: 'gold',    nm: '沙漠金', hex: '#c9a86a', css: '#c9a86a' },
+  { id: 'blue',    nm: '深空蓝', hex: '#3a5a8c', css: '#3a5a8c' },
+  { id: 'red',     nm: '绯红',   hex: '#b04040', css: '#b04040' },
+  { id: 'green',   nm: '松岭绿', hex: '#3d6b4f', css: '#3d6b4f' },
+  { id: 'purple',  nm: '暮山紫', hex: '#6b5a8c', css: '#6b5a8c' },
+];
+let tintCur = null;   // 当前色 id（null = 原色）
+function tintTargets() { return model.parts.filter((p) => p.cat === 'body' || p.cat === 'display'); }
+function applyTint(hex) {
+  for (const p of tintTargets()) for (const m of p.mats) {
+    m.userData.baseColor ||= m.color.clone();
+    if (hex) m.color.set(hex);
+    else m.color.copy(m.userData.baseColor);
+  }
+}
+function setTint(id, save = true) {
+  const t = TINTS.find((x) => x.id === id);
+  tintCur = t && t.hex ? t.id : null;
+  applyTint(t?.hex || null);
+  if (save) {
+    if (tintCur) localStorage.setItem(`iphoneDuo.tint.${CUR}`, tintCur);
+    else localStorage.removeItem(`iphoneDuo.tint.${CUR}`);
+  }
+  document.querySelectorAll('#tintSwatches button').forEach((b) => b.classList.toggle('active', b.dataset.tint === (tintCur || 'titan')));
+  if (t && t.hex) { sfx('snap'); buzz(8); }
+}
+function buildTintUI() {
+  $('#tintSwatches').innerHTML = TINTS.map((t) =>
+    `<button data-tint="${t.id}" style="background:${t.css}" title="${t.nm}"><small>${t.nm}</small></button>`).join('');
+  document.querySelectorAll('#tintSwatches button').forEach((b) => b.onclick = () => setTint(b.dataset.tint));
+  $('#tintReset').onclick = () => setTint('titan');
+  const saved = localStorage.getItem(`iphoneDuo.tint.${CUR}`);
+  setTint(saved || 'titan', false);
+}
+function toggleTint(force) {
+  const want = force !== undefined ? force : !$('#tint').classList.contains('on');
+  $('#tint').classList.toggle('on', want);
+  $('#btnTint').classList.toggle('active', want);
+}
+
+// ---------------- 第五波 B：开机序列 · 分享卡片 ----------------
+// 开机序列：全屏黑幕 → 品牌 Logo 亮起 → 退场时屏幕辉光脉冲，像真的按下了电源键。
+// 相位延时走墙钟（不走 tween 帧时钟）：电影化时间线不该被低帧率拖长。
+const power = { on: false };
+const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+async function powerOn() {
+  if (power.on) return;
+  power.on = true;
+  $('#btnPower').classList.add('active');
+  const ov = $('#powerOverlay');
+  $('#powerLogo').textContent = DEV().name.toUpperCase();
+  ov.classList.add('on');                    // 黑幕淡入
+  sfx('ui'); buzz(10);
+  await sleepMs(1400);
+  ov.classList.add('lit');                   // Logo 亮起
+  await sleepMs(2400);
+  ov.classList.remove('lit');
+  await sleepMs(700);
+  ov.classList.remove('on');                 // 黑幕退场
+  // 屏幕辉光脉冲：bloom 短暂拉满再回落，模拟背光点亮
+  const b0 = bloom.strength, t0 = bloom.threshold;
+  tween(1.6, (k) => { bloom.strength = b0 + 1.1 * Math.sin(PI * Math.min(k * 1.6, 1)); bloom.threshold = t0 + 0.25 * k; })
+    .then(() => { bloom.strength = b0; bloom.threshold = t0; });
+  sfx('boot'); buzz([18, 60, 18, 60, 36]);
+  award('power');
+  power.on = false;
+  $('#btnPower').classList.remove('active');
+}
+
+// 分享卡片：当前视角截图 → 合成 1080×1440 海报（品牌 + 视角 + 链接条）→ 下载 PNG。
+// 截图走壁纸工厂同款路子（瞬时改分辨率渲染一帧再 toBlob），色彩与屏幕所见一致。
+async function exportCard() {
+  const btn = $('#btnCard');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const pr = pixelRatio;
+    const [w, h] = [Math.round(innerWidth * 1.5), Math.round(innerHeight * 1.5)];
+    renderer.setPixelRatio(1);
+    renderer.setSize(w, h, false);
+    composer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    composer.render();
+    const shot = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+    // 还原渲染尺寸（屏幕只模糊一瞬）
+    renderer.setPixelRatio(pr);
+    renderer.setSize(innerWidth, innerHeight, false);
+    composer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    // 合成海报
+    const W = 1080, H = 1440;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#171821'); g.addColorStop(1, '#0a0b10');
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    x.textAlign = 'center';
+    x.fillStyle = '#fff'; x.font = '600 66px -apple-system, "PingFang SC", sans-serif';
+    x.fillText(DEV().name, W / 2, 128);
+    x.fillStyle = 'rgba(255,255,255,.5)'; x.font = '400 26px sans-serif';
+    x.fillText('3D 爆炸图 · 拖一拖，拆开看看', W / 2, 178);
+    // 视角截图：圆角裁剪 + cover 填充
+    const img = await createImageBitmap(shot);
+    const iw = 920, ih = 980, ix = (W - iw) / 2, iy = 226;
+    const s = Math.max(iw / img.width, ih / img.height);
+    const dw = img.width * s, dh = img.height * s;
+    x.save();
+    x.beginPath(); x.roundRect(ix, iy, iw, ih, 30); x.clip();
+    x.drawImage(img, ix + (iw - dw) / 2, iy + (ih - dh) / 2, dw, dh);
+    x.restore();
+    // 链接条
+    const url = buildShareURL();
+    x.fillStyle = 'rgba(255,255,255,.12)';
+    x.beginPath(); x.roundRect(90, H - 148, W - 180, 72, 36); x.fill();
+    x.fillStyle = 'rgba(255,255,255,.8)'; x.font = '500 23px ui-monospace, monospace';
+    x.fillText(url.length > 52 ? url.slice(0, 51) + '…' : url, W / 2, H - 102);
+    x.fillStyle = 'rgba(255,255,255,.35)'; x.font = '400 20px sans-serif';
+    x.fillText('打开链接 · 还原这个视角', W / 2, H - 46);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${DEV().name.replace(/\s+/g, '')}-分享卡片.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    sfx('shutter'); buzz(12);
+    toastMsg('▣ 分享卡片已导出');
+    award('share');   // 卡片也算分享家
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ---------------- 新玩法按钮绑定 ----------------
@@ -1947,7 +2255,15 @@ function bindFun() {
   $('#btnCut').onclick = () => setCut(!cut.on);
   $('#btnZen').onclick = () => toggleZen();
   $('#btnShare').onclick = shareLink;
+  $('#btnDaily').onclick = () => toggleDaily();
+  $('#btnBadges').onclick = () => toggleBadges();
+  $('#btnTint').onclick = () => toggleTint();
+  $('#btnPower').onclick = powerOn;
+  $('#btnCard').onclick = exportCard;
   $('#cutDepth').oninput = (e) => setCutDepth(e.target.value / 100);
+  $('#dailyClose').onclick = () => toggleDaily(false);
+  $('#badgesClose').onclick = () => toggleBadges(false);
+  $('#tintClose').onclick = () => toggleTint(false);
 }
 
 // 测试探针：新玩法状态（e2e 断言用）
@@ -1958,6 +2274,19 @@ window.__fun = () => ({
   asm: { on: asm.on, left: asm.queue.length, done: asm.done, total: asm.total, next: asm.queue[0] || null, nextName: model.parts.find((p) => p.id === asm.queue[0])?.name },
   phys: phys.on, rec: rec.on, ar: ar.on, wallW: DEV().screens[DEV().tabs[0][0]][0],
   bg: scene.background ? '#' + scene.background.getHexString() : null, grid: bpGrid.visible,
+  fifth: {
+    dev: CUR,
+    badgeN: Object.keys(badgeStore).filter((k) => BADGES.some((b) => b.id === k)).length,
+    badgeIds: Object.keys(badgeStore),
+    tint: tintCur,
+    tintHex: (() => { const p = model.parts.find((x) => x.cat === 'body'); const m = p?.mats?.[0]; return m ? '#' + m.color.getHexString() : null; })(),
+    dailyOn: $('#daily').classList.contains('on'),
+    dailyIdx: daily.idx, dailyRight: daily.right, dailyTotal: daily.qs.length,
+    dailyAns: daily.qs[daily.idx]?.ans || null,
+    dailyDone: dailyStore().done === 1 && dailyStore().date === dateKey(),
+    dailyStreak: dailyStreak(dailyStore()),
+    powerOn: power.on,
+  },
 });
 window.__share = shareLink;
 // 材质 swap 抽样：外壳件 / 内部件各取首个 mesh 的当前材质特征（e2e 断言 X 光/蓝图生效）
@@ -2067,6 +2396,8 @@ async function boot() {
   svg.setAttribute('viewBox', `0 0 ${innerWidth} ${innerHeight}`);
   model.update(0);
   if (eggs.fx) model.setFrameIri(true);   // 曾找齐彩蛋：虹彩中框开机即恢复
+  buildTintUI();                           // 换色 DIY：色板 + 本机记忆色恢复
+  award('first');                          // 初来乍到：第一次打开这台 3D 手机
   await step(75);
   await renderer.compileAsync?.(scene, camera);
   await step(100);
