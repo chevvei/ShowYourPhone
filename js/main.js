@@ -9,6 +9,7 @@ import { setAnisotropy, contactShadow, createLockScreen } from './textures.js';
 import { buildPhone, buildPhone18 } from './model.js';
 import { P18, P18_STD, P18_MAX } from './geo.js';
 import { EGG_DEFS, eggsForDev, loadEggs, saveEggs, decodeEggImage, eggOpts } from './eggs.js';
+import { sfx, buzz, toggleSfx, sfxMuted } from './sfx.js';
 
 const $ = (s) => document.querySelector(s);
 const PI = Math.PI;
@@ -56,10 +57,12 @@ controls.autoRotateSpeed = 0.8;
 controls.target.set(0, 0, 0);
 controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
-// 影棚环境：柔光箱 + 灯条，用于钛金属镜面反射
-function studioEnv() {
+// ---------------- 环境光场：影棚 / 日落 / 霓虹 ----------------
+// 三套预设 = 环境贴图（反射高光）+ 平行光颜色强度 + 页面底色，一键切换整套布光
+// 日落/霓虹面板比影棚多一块大面积色纸，让中框和玻璃镀膜反射出标志性色彩
+function studioEnv(base = 0x07080a) {
   const s = new THREE.Scene();
-  s.add(new THREE.Mesh(new THREE.BoxGeometry(40, 40, 40), new THREE.MeshBasicMaterial({ color: 0x07080a, side: THREE.BackSide })));
+  s.add(new THREE.Mesh(new THREE.BoxGeometry(40, 40, 40), new THREE.MeshBasicMaterial({ color: base, side: THREE.BackSide })));
   const panel = (w, h, pos, k, tint = 0xffffff) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(tint).multiplyScalar(k), side: THREE.DoubleSide }));
     m.position.set(...pos); m.lookAt(0, 0, 0); s.add(m);
@@ -72,8 +75,54 @@ function studioEnv() {
   panel(30, 30, [0, -19, 0], 0.15);          // 地面反光
   return s;
 }
+function sunsetEnv() {
+  const s = studioEnv(0x120a08);
+  const panel = (w, h, pos, k, tint) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(tint).multiplyScalar(k), side: THREE.DoubleSide }));
+    m.position.set(...pos); m.lookAt(0, 0, 0); s.add(m);
+  };
+  panel(26, 14, [0, 6, -17], 3.2, 0xff5a3c);   // 正后方巨大的落日色纸
+  panel(10, 4, [0, 13, 14], 2.0, 0xffb36b);    // 前侧暖色反光板
+  return s;
+}
+function neonEnv() {
+  const s = studioEnv(0x06060e);
+  const bar = (pos, k, tint) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(1, 30, 1), new THREE.MeshBasicMaterial({ color: new THREE.Color(tint).multiplyScalar(k) }));
+    m.position.set(...pos); s.add(m);
+  };
+  bar([-13, 2, 6], 8, 0xff2d95);   // 品红霓虹管
+  bar([13, 2, 6], 8, 0x00e5ff);    // 青色霓虹管
+  bar([0, 14, -12], 5, 0x7b2dff);  // 紫色顶灯
+  return s;
+}
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(studioEnv(), 0.03).texture;
+const ENVS = {
+  studio: { label: '影棚光', build: () => studioEnv(), key: [0xffffff, 1.4], rim: [0xbcd4ff, 1.0], bg: null },
+  sunset: { label: '日落光', build: sunsetEnv, key: [0xffb08a, 1.25], rim: [0xff7a4d, 1.5], bg: 'sunset' },
+  neon: { label: '霓虹光', build: neonEnv, key: [0x9db4ff, 1.0], rim: [0x00e5ff, 1.6], bg: 'neon' },
+};
+const envCache = { studio: pmrem.fromScene(studioEnv(), 0.03).texture };
+let curEnv = 'studio';
+function setEnv(name) {
+  const E = ENVS[name];
+  if (!E) return;
+  curEnv = name;
+  scene.environment = (envCache[name] ||= pmrem.fromScene(E.build(), 0.03)).texture;
+  key.color.setHex(E.key[0]); key.intensity = E.key[1];
+  rim.color.setHex(E.rim[0]); rim.intensity = E.rim[1];
+  if (E.bg) document.body.dataset.env = E.bg;
+  else delete document.body.dataset.env;
+  $('#btnEnv').textContent = E.label;
+}
+// 声明顺序：ENVS 里引用的 key/rim 灯光在此创建（setEnv 仅在 UI 交互后调用，届时已存在）
+const key = new THREE.DirectionalLight(ENVS.studio.key[0], ENVS.studio.key[1]);
+key.position.set(-200, 300, 250);
+scene.add(key);
+const rim = new THREE.DirectionalLight(ENVS.studio.rim[0], ENVS.studio.rim[1]);
+rim.position.set(250, 120, -300);
+scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x202020, 0.35));
 
 // 后处理：UnrealBloom 泛光——常态只给屏幕高光一点辉光（阈值以上才生效，几乎无感），
 // 找齐全部隐藏细节后短暂增强，让虹彩中框 / 彩带 / 灵动岛流光“炸”开
@@ -82,14 +131,6 @@ composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.18, 0.55, 0.9);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
-
-const key = new THREE.DirectionalLight(0xffffff, 1.4);
-key.position.set(-200, 300, 250);
-scene.add(key);
-const rim = new THREE.DirectionalLight(0xbcd4ff, 1.0);
-rim.position.set(250, 120, -300);
-scene.add(rim);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x202020, 0.35));
 
 // ---------------- 模型 ----------------
 const stage = new THREE.Group();
@@ -284,16 +325,28 @@ canvas.addEventListener('pointerup', (e) => {
   if (moved > (e.pointerType === 'touch' ? 10 : 4)) return;
   mouse.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   pick();
+  // 拆装挑战进行中：所有点击都交给装配逻辑（判对/判错），不走部件选择
+  if (asm.on) { if (hovered) asmPick(hovered); return; }
+  // 部件大师·盲拆找件模式：点击就是作答
+  if (quiz.on && quiz.mode === 'find') { if (hovered) quizFindAnswer(hovered.id); return; }
   // 屏幕内「假手机」交互：命中屏幕时先把点击交给锁屏 UI（照片 App / 手电筒），
   // 被吃掉就不再触发部件选择——像真的在用这台 3D 手机
   if (lastHit && lastHit.uv) {
     const scr = (SCREEN_LOCKS[CUR] || {})[lastHit.object.userData.partId];
     if (scr) {
       const [sw, sh] = DEV().screens[scr];
-      if (lockOf(scr).hit(lastHit.uv.x * sw, (1 - lastHit.uv.y) * sh)) { pokeUI(); return; }
+      if (lockOf(scr).hit(lastHit.uv.x * sw, (1 - lastHit.uv.y) * sh)) { pokeUI(); sfx('tick'); buzz(8); return; }
     }
   }
   selectPart(hovered ? hovered.id : null, false);
+});
+// 爆炸态双击部件 = 弹飞：给它一个随机冲量，转几圈后自己飞回原位
+canvas.addEventListener('dblclick', (e) => {
+  if (S.keynote || S.explode < 0.5 || phys.on) return;
+  mouse.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  pick();
+  if (!hovered) return;
+  kickPart(hovered.id);
 });
 
 // 移动端：触碰哪半边就滑出哪一侧（部件栏 / 控制坞不同时占屏），静置 5 秒自动收起
@@ -419,6 +472,7 @@ window.__screenRect = (partId) => {
 
 function selectPart(id, fly) {
   S.selected = id;
+  if (id) { sfx('tick'); buzz(8); }
   // 彩蛋发现：聚焦到埋有隐藏细节的部件即视为“找到”（真正的乐趣在于凑近读那行微雕）
   const trig = (EGG_TRIGGERS[CUR] || EGG_TRIGGERS.p18)[id];
   if (trig) discoverEgg(trig);
@@ -460,13 +514,14 @@ function bindUI() {
     store.dim = v;
     saveStore();
   };
-  $('#btnOpen').onclick = () => { cancelTweens(); animExplode(0, 0.8).then(() => animFold(0)); };
-  $('#btnClose').onclick = () => { cancelTweens(); selectPart(null); animExplode(0, 0.8).then(() => animFold(PI)); };
+  $('#btnOpen').onclick = () => { cancelTweens(); animExplode(0, 0.8).then(() => animFold(0).then(() => { sfx('hinge'); buzz(12); })); };
+  $('#btnClose').onclick = () => { cancelTweens(); selectPart(null); animExplode(0, 0.8).then(() => animFold(PI).then(() => { sfx('hinge'); buzz(12); })); };
   $('#btnExplode').onclick = async () => {
     cancelTweens();
-    if (S.explode > 0.5) { animExplode(0); return; }
+    if (S.explode > 0.5) { animExplode(0); sfx('whoosh'); return; }
     if (S.fold > 0.01) await animFold(0, 1.2);
     animExplode(1);
+    sfx('whoosh');
     flyTo(...VIEWS.explode, 2);
   };
   $('#btnAuto').onclick = (e) => { S.auto = !S.auto; e.currentTarget.classList.toggle('active', S.auto); };
@@ -482,6 +537,10 @@ function bindUI() {
     if (e.key === 'Escape') {
       if (S.keynote) stopKeynote();
       else if ($('#custom').classList.contains('on')) $('#custom').classList.remove('on');
+      else if (quiz.on) toggleQuiz(false);
+      else if ($('#asm').classList.contains('on')) toggleAsm(false);
+      else if (ar.on) toggleAR();
+      else if (rec.on) toggleRec();
       else selectPart(null);
     }
     if (S.keynote) return;
@@ -489,6 +548,8 @@ function bindUI() {
     if ((e.key === 'f' || e.key === 'F') && DEV().hasFold) (S.fold > 1 ? $('#btnOpen') : $('#btnClose')).click();
     if (e.key === 'k' || e.key === 'K') startKeynote();
     if (e.key === 'l' || e.key === 'L') $('#btnLabels').click();   // 标注 隐藏/显示
+    if (e.key === 'q' || e.key === 'Q') toggleQuiz();              // 部件大师
+    if (e.key === 'g' || e.key === 'G') tossPhone();               // 抛一下
   });
 }
 
@@ -901,6 +962,7 @@ function discoverEgg(id) {
   if (!def || !eggsForDev(CUR).some((e) => e.id === id)) return;
   eggs.found[id] = true;
   saveEggs(eggs);
+  sfx('pop'); buzz([14, 50, 14]);
   const ds = eggsForDev(CUR);
   toastEgg(`◈ 发现隐藏细节「${def.name}」 ${ds.filter((e) => eggs.found[e.id]).length}/${ds.length}`);
   renderEggList();
@@ -1282,6 +1344,12 @@ P18_IDS.forEach((id) => (DEVICES[id].script = SCRIPT_P18));
 function switchDevice(dev) {
   if (!DEVICES[dev] || dev === CUR) return;
   if (S.keynote) stopKeynote();
+  // 新玩法互斥退出：答题 / 拆装 / AR 绑定的是旧模型的部件表，切设备必须先收摊
+  if (quiz.on) toggleQuiz(false);
+  if ($('#asm').classList.contains('on')) toggleAsm(false);
+  if (ar.on) toggleAR();
+  if (phys.on) { phys.on = false; stage.position.set(0, 0, 0); stage.rotation.set(0, 0, 0); }
+  kicks.clear();
   cancelTweens();
   CUR = dev;
   const D = DEVICES[dev];
@@ -1289,9 +1357,8 @@ function switchDevice(dev) {
   document.querySelectorAll('#devTabs button').forEach((b) => b.classList.toggle('active', b.dataset.dev === dev));
   $('#brandName').textContent = D.name;
   document.title = `${D.name} · 3D 爆炸图`;
-  $('#hint').textContent = D.hasFold
-    ? '拖拽旋转 · 滚轮缩放 · 右键平移 · E 爆炸 · F 开合 · K 演示'
-    : '拖拽旋转 · 滚轮缩放 · 右键平移 · E 爆炸 · K 演示';
+  $('#hint').textContent = '拖拽旋转 · 滚轮缩放 · 右键平移 · E 爆炸 · F 开合 · L 标注 · K 演示 · Q 部件大师 · G 抛掷 · 爆炸态双击部件弹飞';
+  sfx('whoosh'); buzz(10);
   // 模型热替换（首次切换才构建，之后走缓存）
   // 顺序：先构建成功再摘下旧模型，构建异常时保留旧画面而不是空场景
   built[dev] ||= D.build();
@@ -1366,6 +1433,422 @@ function stopKeynote() {
   model.setFocus(S.selected ? [S.selected] : null);
 }
 
+// ================================================================
+//                      可玩性扩展：壁纸 / 测验 / 拆装 / 录制 / AR / 物理
+// ================================================================
+
+// 通用提示（复用彩蛋 toast 的容器与动效）
+function toastMsg(msg) {
+  const t = $('#eggToast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('on'), 3000);
+}
+
+// ---------------- 壁纸工厂：当前视角 → 机型原生分辨率 PNG ----------------
+// 思路：把 WebGL 画布瞬时切到目标分辨率渲染一帧，再 canvas.toBlob 导出。
+// 相比 RenderTarget 读像素，色彩管理 / 色调映射与屏幕所见完全一致，零偏色。
+async function exportWallpaper() {
+  const btn = $('#btnWall');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const [w, h] = DEV().screens[DEV().tabs[0][0]];
+    const pr = pixelRatio;
+    renderer.setPixelRatio(1);
+    renderer.setSize(w, h, false);          // false：不动 CSS，屏幕上只模糊一瞬
+    composer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    composer.render();
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${DEV().name.replace(/\s+/g, '')}-壁纸-${w}x${h}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    sfx('shutter'); buzz(12);
+    toastMsg(`⤓ 已导出 ${DEV().name} 壁纸 ${w}×${h}`);
+  } finally {
+    renderer.setPixelRatio(pr);
+    renderer.setSize(innerWidth, innerHeight, false);
+    composer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    btn.disabled = false;
+  }
+}
+
+// ---------------- 部件大师：看图识名 / 盲拆找件 ----------------
+// 看图识名：飞行特写一个部件，从 4 个名字里选对；
+// 盲拆找件：只给名字，直接在 3D 模型上点出它（更难，连击翻倍加成）。
+// 防作弊：答题期间隐藏部件列表与 hover 提示、强制关标注。
+const quiz = {
+  on: false, mode: 'name', ans: '', busy: false,
+  streak: 0, best: +(localStorage.getItem('iphoneDuo.quizBest') || 0),
+  keepLabels: true,
+};
+function quizPool() { return model.parts; }
+function quizFly(id) {
+  const p = model.parts.find((q) => q.id === id);
+  if (!p) return;
+  model.setFocus([id]);
+  (async () => {
+    if (S.fold > 0.01) await animFold(0, 1.2);
+    if (S.explode < 0.99) await animExplode(1, 1.4);
+    model.update(0);
+    stage.updateMatrixWorld(true);
+    const c = p.anchorObj.localToWorld(p.anchor.clone());
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    // 特写方向随机绕目标转一拳，增加辨识难度
+    const ang = (Math.random() - 0.5) * 2.4;
+    dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), ang);
+    flyTo(c.clone().addScaledVector(dir, 270).toArray(), c.toArray(), 1.4);
+  })();
+}
+function quizNext() {
+  const pool = quizPool();
+  if (pool.length < 4) return;
+  quiz.ans = pool[(Math.random() * pool.length) | 0].id;
+  quiz.busy = false;
+  if (quiz.mode === 'name') {
+    // 4 个选项：答案 + 3 个干扰项
+    const opts = [quiz.ans];
+    while (opts.length < 4) {
+      const c = pool[(Math.random() * pool.length) | 0].id;
+      if (!opts.includes(c)) opts.push(c);
+    }
+    quiz.opts = opts.sort(() => Math.random() - 0.5);
+    $('#quizQ').innerHTML = `镜头对准的部件是？<small>从下面 4 个名字里选出它</small>`;
+    $('#quizOpts').innerHTML = '';
+    for (const id of quiz.opts) {
+      const b = document.createElement('button');
+      b.textContent = model.parts.find((p) => p.id === id).name;
+      b.onclick = () => quizNameAnswer(id, b);
+      $('#quizOpts').append(b);
+    }
+    quizFly(quiz.ans);
+  } else {
+    $('#quizQ').innerHTML = `在模型上点出：<b style="color:var(--acc)">${model.parts.find((p) => p.id === quiz.ans).name}</b><small>直接点击 3D 模型上对应的部件</small>`;
+    $('#quizOpts').innerHTML = '<div class="meta" style="margin:0">旋转查看 · 点击你认为正确的部件</div>';
+    selectPart(null);
+  }
+  quizScore();
+}
+function quizScore() {
+  $('#quizScore').innerHTML = `连击 <b>${quiz.streak}</b> · 本次最高 ${quiz.streak > quiz.hi ? (quiz.hi = quiz.streak) : quiz.hi} · 纪录 ${quiz.best}`;
+}
+quiz.hi = 0;
+function quizRight() {
+  quiz.streak++;
+  if (quiz.streak > quiz.best) {
+    quiz.best = quiz.streak;
+    localStorage.setItem('iphoneDuo.quizBest', quiz.best);
+  }
+  sfx('right'); buzz(12);
+  quiz.busy = true;
+  quizScore();
+  clearTimeout(quiz.t);
+  quiz.t = setTimeout(quizNext, 800);
+}
+function quizWrong(showName) {
+  quiz.streak = 0;
+  sfx('wrong'); buzz([26]);
+  quiz.busy = true;
+  quizScore();
+  toastMsg(`✕ 是「${showName}」，连击清零`);
+  clearTimeout(quiz.t);
+  quiz.t = setTimeout(quizNext, 1300);
+}
+function quizNameAnswer(id, btn) {
+  if (quiz.busy) return;
+  const right = id === quiz.ans;
+  btn.classList.add(right ? 'right' : 'wrong');
+  if (!right) [...$('#quizOpts').children].find((b) => b.textContent === model.parts.find((p) => p.id === quiz.ans).name)?.classList.add('right');
+  right ? quizRight() : quizWrong(model.parts.find((p) => p.id === quiz.ans).name);
+}
+function quizFindAnswer(id) {
+  if (quiz.busy) return;
+  if (id === quiz.ans) quizRight();
+  else quizWrong(model.parts.find((p) => p.id === quiz.ans).name);
+}
+function toggleQuiz(force) {
+  const want = force !== undefined ? force : !quiz.on;
+  if (want === quiz.on) return;
+  quiz.on = want;
+  $('#quiz').classList.toggle('on', quiz.on);
+  document.body.classList.toggle('quizing', quiz.on);
+  $('#btnQuiz').classList.toggle('active', quiz.on);
+  if (quiz.on) {
+    if (asm.on) toggleAsm(false);
+    quiz.keepLabels = S.labels;
+    if (S.labels) { S.labels = false; $('#btnLabels').classList.remove('active'); }
+    quiz.streak = 0; quiz.hi = 0;
+    quizNext();
+  } else {
+    clearTimeout(quiz.t);   // 关面板时掐掉挂起的换题定时器（否则会飞相机）
+    if (quiz.keepLabels && !S.labels) { S.labels = true; localStorage.setItem('iphoneDuo.labels', '1'); $('#btnLabels').classList.add('active'); }
+    model.setFocus(null);
+  }
+}
+
+// ---------------- 拆装挑战：爆炸打乱 → 按装配顺序点回 → 开机 ----------------
+// 部件级爆炸覆盖（model.setPartK）让「逐个归位」成为可能：
+// 全局 explode 保持 1，答对的部件单独 k→0 飞回原位；装错抖动提醒。
+const asm = { on: false, queue: [], done: 0, total: 0, t0: 0 };
+function asmBestKey() { return `iphoneDuo.asmBest.${CUR}`; }
+function startAsm() {
+  selectPart(null);
+  cancelTweens();
+  asm.on = true;
+  $('#asm').classList.add('on');
+  $('#btnAsm').classList.add('active');
+  $('#asmNext').textContent = '准备中…';
+  $('#asmProg').textContent = '';
+  (async () => {
+    if (S.fold > 0.01) await animFold(0, 1.2);
+    if (S.explode < 0.99) await animExplode(1, 1.4);
+    model.clearPartK();
+    // 装配顺序 = 爆炸顺序倒序：越晚炸开的（外壳类）越先装回
+    asm.queue = [...model.parts].sort((a, b) => b.order - a.order).map((p) => p.id);
+    asm.total = asm.queue.length;
+    asm.done = 0;
+    asm.t0 = performance.now();
+    updateAsmUI();
+  })();
+}
+function updateAsmUI(finish, isRec) {
+  if (finish !== undefined) {
+    const best = localStorage.getItem(asmBestKey());
+    $('#asmNext').textContent = `🎉 装配完成！用时 ${finish}s${isRec ? ' · 新纪录' : ` · 纪录 ${best}s`}`;
+    $('#asmProg').textContent = `已装回 ${asm.total} / ${asm.total}`;
+    return;
+  }
+  const next = model.parts.find((p) => p.id === asm.queue[0]);
+  $('#asmNext').textContent = asm.queue.length ? `下一个装回：${next.name}` : '—';
+  const t = asm.t0 ? ((performance.now() - asm.t0) / 1000).toFixed(1) : '0.0';
+  const best = localStorage.getItem(asmBestKey());
+  $('#asmProg').textContent = `已装回 ${asm.done} / ${asm.total} · 用时 ${t}s${best ? ` · 纪录 ${best}s` : ''}`;
+}
+function asmPick(p) {
+  if (!asm.queue.length) return;
+  if (p.id === asm.queue[0]) {
+    const from = p.k || 1;
+    tween(0.42, (k) => model.setPartK(p.id, from * (1 - k)));
+    asm.queue.shift();
+    asm.done++;
+    sfx('snap'); buzz(10);
+    updateAsmUI();
+    if (!asm.queue.length) asmFinish();
+  } else {
+    sfx('wrong'); buzz([26]);
+    $('#asmNext').animate(
+      [{ transform: 'translateX(0)' }, { transform: 'translateX(-7px)' }, { transform: 'translateX(7px)' }, { transform: 'translateX(0)' }],
+      { duration: 240 }
+    );
+  }
+}
+function asmFinish() {
+  const t = ((performance.now() - asm.t0) / 1000).toFixed(1);
+  const old = localStorage.getItem(asmBestKey());
+  const isRec = !old || +t < +old;
+  if (isRec) localStorage.setItem(asmBestKey(), t);
+  asm.on = false;
+  $('#btnAsm').classList.remove('active');
+  sfx('boot'); buzz([18, 60, 18, 60, 36]);
+  burstConfetti();
+  updateAsmUI(t, isRec);
+  // 收拢爆炸 + 清覆盖，整机复原
+  const e0 = S.explode;
+  tween(0.9, (k) => { S.explode = e0 * (1 - k); }).then(() => model.clearPartK());
+}
+function toggleAsm(force, giveup) {
+  const want = force !== undefined ? force : !asm.on && !$('#asm').classList.contains('on');
+  if (!want) {
+    if (giveup && asm.on) {
+      asm.on = false;
+      model.clearPartK();
+      animExplode(0, 0.9);
+    }
+    asm.on = false;
+    asm.queue = [];
+    $('#asm').classList.remove('on');
+    $('#btnAsm').classList.remove('active');
+    if (giveup) toastMsg('已放弃本次拆装，整机复原');
+  } else {
+    if (quiz.on) toggleQuiz(false);
+    startAsm();
+  }
+}
+
+// ---------------- 运镜录制：canvas.captureStream → WebM ----------------
+const rec = { on: false, mr: null, chunks: [] };
+function toggleRec() {
+  if (rec.on) {
+    rec.mr?.stop();
+    rec.on = false;
+    $('#btnRec').classList.remove('active');
+    $('#btnRec').textContent = '⏺ 录制';
+    return;
+  }
+  let mime = 'video/webm;codecs=vp9';
+  if (!window.MediaRecorder || !canvas.captureStream) { toastMsg('此浏览器不支持录屏，请改用 Chrome'); return; }
+  if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+  try {
+    rec.mr = new MediaRecorder(canvas.captureStream(30), { mimeType: mime, videoBitsPerSecond: 12_000_000 });
+  } catch { toastMsg('录屏启动失败'); return; }
+  rec.chunks = [];
+  rec.mr.ondataavailable = (e) => e.data.size && rec.chunks.push(e.data);
+  rec.mr.onstop = () => {
+    const blob = new Blob(rec.chunks, { type: rec.mr.mimeType });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `iphoneDuo-${CUR}-${new Date().toISOString().slice(0, 10)}.webm`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toastMsg('⏺ 运镜已导出 WebM');
+  };
+  rec.mr.start(250);
+  rec.on = true;
+  $('#btnRec').classList.add('active');
+  $('#btnRec').textContent = '⏹ 停止';
+  toastMsg('⏺ 录制中：旋转 / 爆炸 / 开合都会被录下');
+}
+
+// ---------------- AR 预览：摄像头实拍做背景 ----------------
+// canvas 本身 alpha:true，关掉页面底色后 3D 手机直接悬浮在真实桌面上
+const ar = { on: false, stream: null, video: null };
+async function toggleAR() {
+  if (ar.on) {
+    ar.stream?.getTracks().forEach((t) => t.stop());
+    ar.video?.remove();
+    ar.on = false;
+    document.body.classList.remove('ar');
+    $('#btnAR').classList.remove('active');
+    return;
+  }
+  try {
+    ar.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+  } catch { toastMsg('无法访问摄像头：请检查权限后重试'); return; }
+  const v = document.createElement('video');
+  v.id = 'arVideo';
+  v.autoplay = true; v.muted = true; v.playsInline = true;
+  v.srcObject = ar.stream;
+  document.body.prepend(v);
+  try { await v.play(); } catch { /* autoplay 拒绝也不致命 */ }
+  ar.video = v;
+  ar.on = true;
+  document.body.classList.add('ar');
+  $('#btnAR').classList.add('active');
+  toastMsg('▣ AR 模式：把手机放到你的桌面上（再点一次退出）');
+}
+
+// ---------------- 物理玩具：抛掷 + 部件弹飞 ----------------
+// 抛掷：整个 stage 变刚体——重力 / 弹跳 / 翻滚，落地弹两下后自动飞回原位；
+// 弹飞：爆炸态双击部件，弹簧仿真沿爆炸方向过冲回弹，转着飞回队列。
+const phys = { on: false, v: null, w: null, base: null, landY: -60 };
+function tossPhone() {
+  if (S.keynote || asm.on) return;
+  phys.on = true;
+  cancelTweens();
+  if (S.fold > 0.01) setFold(0);           // 抛之前先合上（Duo），直板机无感
+  model.update(0);
+  stage.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(model.root);
+  phys.landY = Math.min(-78 - box.min.y, -60);   // 让机身底部落在影子平面上
+  phys.base = stage.position.clone();
+  phys.v = new THREE.Vector3((Math.random() - 0.5) * 240, 480 + Math.random() * 180, (Math.random() - 0.5) * 240);
+  phys.w = new THREE.Vector3((Math.random() - 0.5) * 7, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 7);
+  sfx('whoosh'); buzz(16);
+}
+function tickPhys(dt) {
+  if (!phys.on) return;
+  phys.v.y -= 980 * dt;                     // 场景单位下的重力
+  stage.position.addScaledVector(phys.v, dt);
+  stage.rotation.x += phys.w.x * dt;
+  stage.rotation.y += phys.w.y * dt;
+  stage.rotation.z += phys.w.z * dt;
+  if (stage.position.y <= phys.landY && phys.v.y < 0) {
+    if (Math.abs(phys.v.y) > 150) {          // 还弹得动：反弹并衰减
+      stage.position.y = phys.landY;
+      phys.v.y *= -0.42;
+      phys.v.x *= 0.62; phys.v.z *= 0.62;
+      phys.w.multiplyScalar(0.55);
+      sfx('thud'); buzz(14);
+    } else {                                 // 弹够了：回正飞回原位
+      phys.on = false;
+      const p0 = stage.position.clone(), r0 = stage.rotation.clone();
+      tween(1.1, (k) => {
+        stage.position.lerpVectors(p0, phys.base, k);
+        stage.rotation.set(r0.x * (1 - k), r0.y * (1 - k), r0.z * (1 - k));
+      }, ease.inOut).then(() => {
+        stage.position.copy(phys.base);
+        stage.rotation.set(0, 0, 0);
+        sfx('snap'); buzz(10);
+      });
+    }
+  }
+}
+// 弹飞弹簧：k'' = -stiffness·(k - 全局位) - damping·k'
+const kicks = new Map();
+function kickPart(id) {
+  const p = model.parts.find((q) => q.id === id);
+  if (!p) return;
+  kicks.set(id, { k: p.k, v: 3.5 + Math.random() * 5, g: p.k });
+  sfx('pop'); buzz(12);
+}
+function tickKicks(dt) {
+  for (const [id, s] of kicks) {
+    const a = -46 * (s.k - s.g) - 5.2 * s.v;
+    s.v += a * dt;
+    s.k += s.v * dt;
+    model.setPartK(id, s.k);
+    if (Math.abs(s.k - s.g) < 0.02 && Math.abs(s.v) < 0.12) {
+      model.delPartK(id);
+      kicks.delete(id);
+    }
+  }
+}
+
+// ---------------- 新玩法按钮绑定 ----------------
+function bindFun() {
+  const sb = $('#btnSfx');
+  const syncSfxBtn = () => { sb.classList.toggle('active', !sfxMuted()); sb.textContent = sfxMuted() ? '♪ 静音' : '♪ 音效'; };
+  sb.onclick = () => { toggleSfx(); syncSfxBtn(); };
+  syncSfxBtn();
+  $('#btnEnv').onclick = () => {
+    const ks = Object.keys(ENVS);
+    setEnv(ks[(ks.indexOf(curEnv) + 1) % ks.length]);
+    sfx('ui'); buzz(8);
+  };
+  $('#btnWall').onclick = exportWallpaper;
+  $('#btnQuiz').onclick = () => toggleQuiz();
+  $('#quizClose').onclick = () => toggleQuiz(false);
+  document.querySelectorAll('#quizModes button').forEach((b) => (b.onclick = () => {
+    if (quiz.mode === b.dataset.qm) return;
+    quiz.mode = b.dataset.qm;
+    document.querySelectorAll('#quizModes button').forEach((x) => x.classList.toggle('active', x === b));
+    quiz.streak = 0;
+    clearTimeout(quiz.t);
+    quizNext();
+  }));
+  $('#btnAsm').onclick = () => toggleAsm();
+  $('#asmClose').onclick = () => toggleAsm(false);
+  $('#asmGiveup').onclick = () => toggleAsm(false, true);
+  $('#btnRec').onclick = toggleRec;
+  $('#btnAR').onclick = toggleAR;
+  $('#btnToss').onclick = tossPhone;
+}
+
+// 测试探针：新玩法状态（e2e 断言用）
+window.__fun = () => ({
+  env: curEnv, sfx: !sfxMuted(),
+  quiz: { on: quiz.on, mode: quiz.mode, streak: quiz.streak, best: quiz.best, ans: quiz.ans, ansName: model.parts.find((p) => p.id === quiz.ans)?.name },
+  asm: { on: asm.on, left: asm.queue.length, done: asm.done, total: asm.total, next: asm.queue[0] || null, nextName: model.parts.find((p) => p.id === asm.queue[0])?.name },
+  phys: phys.on, rec: rec.on, ar: ar.on, wallW: DEV().screens[DEV().tabs[0][0]][0],
+});
+
 // ---------------- 主循环 ----------------
 const clock = new THREE.Clock();
 let fpsAcc = 0, fpsN = 0;
@@ -1379,19 +1862,29 @@ function frame() {
   model.setExplode(S.explode);
   model.update(dt);
 
+  // 物理玩具：抛掷刚体 + 爆炸态部件弹飞弹簧
+  tickPhys(dt);
+  tickKicks(dt);
+
   // 屏保内部自调度：仅交叉淡入 / 分钟跳变 / 脏标记时才重绘，功耗极低
   Object.values(DEV().locks).forEach((k) => k.tick(dt));
   if ($('#custom').classList.contains('on') && lockOf(ssTarget).idx !== thumbIdx) markThumb();
-  // 合上时让机身保持居中（Duo）；直板机固定居中
-  if (DEV().hasFold) {
+  // 抛掷进行中 stage 由物理接管，跳过常规定位（否则每帧被拉回原位）
+  if (phys.on) {
+    shadow.scale.set(300, 120, 1);
+    shadow.material.opacity = 0.5;
+  } else if (DEV().hasFold) {
     const f = S.fold / PI;
     stage.position.set(-40 * f, 0, -1.75 * f);
     shadow.scale.set(220 - 110 * f + S.explode * 30, 70 + S.explode * 240 + f * 10, 1);
+    shadow.material.opacity = 0.85 - S.explode * 0.35;
   } else {
     stage.position.set(0, 0, 0);
     shadow.scale.set(220 + S.explode * 30, 70 + S.explode * 240, 1);
+    shadow.material.opacity = 0.85 - S.explode * 0.35;
   }
-  shadow.material.opacity = 0.85 - S.explode * 0.35;
+  // 拆装挑战计时实时刷新（不另开定时器）
+  if (asm.on) updateAsmUI();
 
   if (mouseDirty && !S.keynote) { mouseDirty = false; pick(); }
   tickConfetti(dt);
@@ -1451,6 +1944,7 @@ async function boot() {
   bindUI();
   bindCustom();
   bindEggs();
+  bindFun();
   setScheme('white');
   svg.setAttribute('viewBox', `0 0 ${innerWidth} ${innerHeight}`);
   model.update(0);

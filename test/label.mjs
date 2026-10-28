@@ -8,6 +8,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 try {
   const page = await browser.newPage();
   await page.goto('http://localhost:8124/iphoneDuo.html', { waitUntil: 'domcontentloaded' });
+  // 预设 SEEN 跳过开场发布会：Esc 与 keynote 自动启动在慢渲染下有竞态，
+  // 不预设的话 L 键会被 `if (S.keynote) return` 挡掉
+  await page.evaluate(() => localStorage.setItem('iphoneDuo.seen', '1'));
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => document.querySelector('#loader.done'), { timeout: 30000 });
   await sleep(2500);
   await page.keyboard.press('Escape');

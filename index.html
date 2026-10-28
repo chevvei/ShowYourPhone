@@ -79,6 +79,14 @@
       <button id="btnLabels" class="active">标注</button>
       <button id="btnCustom">✎ 个性化</button>
       <button id="btnKeynoteM">▶ 发布会演示</button>
+      <button id="btnSfx" title="音效与振动开关">♪ 音效</button>
+      <button id="btnEnv" title="环境光场：影棚 / 日落 / 霓虹">影棚光</button>
+      <button id="btnWall" title="按机型屏幕分辨率导出当前视角壁纸">⤓ 壁纸</button>
+      <button id="btnQuiz" title="部件大师：答题挑战 (Q)">? 部件大师</button>
+      <button id="btnAsm" title="按装配顺序把部件装回去">⚙ 拆装挑战</button>
+      <button id="btnRec" title="录制运镜视频并导出 WebM">⏺ 录制</button>
+      <button id="btnAR" title="用摄像头实拍画面当背景，AR 体验">▣ AR</button>
+      <button id="btnToss" title="把手机抛起来玩 (G)">⤒ 抛一下</button>
     </div>
     <div class="views">
       <button data-view="hero">总览</button>
@@ -165,6 +173,34 @@
   </section>
   <div id="eggToast"></div>
 
+  <!-- 部件大师：看图识名 / 盲拆找件 · 连击挑战（Q 键直达） -->
+  <section id="quiz">
+    <button id="quizClose" aria-label="关闭">×</button>
+    <div class="ph">部件大师 <small>答题 · 盲拆 · 连击</small></div>
+
+    <div class="sec">模式</div>
+    <div class="row" id="quizModes">
+      <button data-qm="name" class="active">看图识名</button>
+      <button data-qm="find">盲拆找件</button>
+    </div>
+
+    <div id="quizScore"></div>
+    <div id="quizQ"></div>
+    <div id="quizOpts"></div>
+    <div class="meta">看图识名：特写一个部件，从 4 个名字里选出它 · 盲拆找件：看名字，直接在模型上点出那个部件 · 连击越高越强</div>
+  </section>
+
+  <!-- 拆装挑战：爆炸打乱后按装配顺序点回部件，装完开机 -->
+  <section id="asm">
+    <button id="asmClose" aria-label="关闭">×</button>
+    <div class="ph">拆装挑战 <small>按装配顺序复原整机</small></div>
+
+    <div id="asmProg"></div>
+    <div id="asmNext"></div>
+    <div class="meta">点击 3D 模型上闪烁提示的下一个部件把它装回 · 装错会抖动提醒 · 全部装完即开机 · 用时与最快纪录都存在本机</div>
+    <div class="row"><button id="asmGiveup" class="ghost">放弃本次</button></div>
+  </section>
+
   <div id="caption">
     <div id="capEyebrow"></div>
     <h1 id="capTitle"></h1>
@@ -173,7 +209,7 @@
   <div id="kbar"><div id="kProgress"></div></div>
   <div id="kctrl"><span id="kChapter"></span><button id="kExit">退出演示 Esc</button></div>
 
-  <div id="hint">拖拽旋转 · 滚轮缩放 · 右键平移 · E 爆炸 · F 开合 · L 标注 · K 演示</div>
+  <div id="hint">拖拽旋转 · 滚轮缩放 · E 爆炸 · F 开合 · L 标注 · K 演示 · Q 部件大师 · G 抛掷 · 爆炸态双击部件弹飞</div>
   <div id="touchHint">左半屏出部件 · 右半屏出控制 · 单指旋转 · 双指缩放</div>
 
   <div id="loader">

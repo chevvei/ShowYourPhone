@@ -385,3 +385,54 @@ body.mobile #eggToast { top: calc(env(safe-area-inset-top) + 54px); white-space:
     background: linear-gradient(90deg, transparent, rgba(255,255,255,.16), transparent);
   }
 }
+
+/* ---------------- 环境光场（影棚 / 日落 / 霓虹） ---------------- */
+body[data-env="sunset"] { background: radial-gradient(120% 90% at 50% 26%, #4b2a35 0%, #201318 52%, #070405 100%); }
+body[data-env="neon"] { background: radial-gradient(120% 90% at 50% 30%, #171436 0%, #0a0918 55%, #030308 100%); }
+
+/* ---------------- AR 预览：摄像头实拍做背景 ---------------- */
+#arVideo { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+#gl { z-index: 1; }
+body.ar #hint { opacity: 0; }
+#btnAR.active { background: rgba(48, 209, 88, .4); border-color: rgba(48, 209, 88, .8); }
+
+/* ---------------- 录制状态 ---------------- */
+#btnRec.active { background: rgba(255, 69, 58, .42); border-color: rgba(255, 69, 58, .85); animation: recpulse 1.6s ease-in-out infinite; }
+@keyframes recpulse { 50% { box-shadow: 0 0 14px rgba(255, 69, 58, .5); } }
+
+/* ---------------- 部件大师 / 拆装挑战 面板 ---------------- */
+#quiz, #asm {
+  position: fixed; right: 18px; top: 70px; bottom: 120px; width: 302px; overflow-y: auto;
+  padding: 16px 16px 18px; border-radius: 16px; background: var(--glass); border: 1px solid var(--line);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 7; scrollbar-width: thin;
+  opacity: 0; transform: translateX(24px); pointer-events: none;
+  transition: opacity .4s, transform .45s cubic-bezier(.2,.8,.2,1);
+}
+#quiz.on, #asm.on { opacity: 1; transform: none; pointer-events: auto; }
+#quizClose, #asmClose { position: absolute; right: 10px; top: 8px; font-size: 20px; color: var(--mut); z-index: 1; }
+#quiz .ph, #asm .ph { font-size: 14px; font-weight: 600; padding-right: 26px; }
+#quiz .ph small, #asm .ph small { display: block; color: var(--mut); font-weight: 400; font-size: 10.5px; margin-top: 2px; }
+#quiz .meta, #asm .meta { font-size: 10.5px; color: var(--mut); margin-top: 8px; line-height: 1.5; }
+#quizModes { display: flex; gap: 6px; margin-bottom: 4px; }
+#quizModes button { flex: 1; padding: 7px 4px; font-size: 11.5px; border-radius: 10px; background: rgba(255,255,255,.06); border: 1px solid var(--line); }
+#quizModes button.active { background: rgba(41,151,255,.35); border-color: rgba(41,151,255,.7); }
+#quizScore { font-size: 12px; color: #d2d2d7; margin: 12px 0 6px; font-variant-numeric: tabular-nums; }
+#quizScore b { color: #ffd76a; font-weight: 600; }
+#quizQ { font-size: 14.5px; font-weight: 600; margin-bottom: 10px; line-height: 1.4; }
+#quizQ small { display: block; font-size: 11px; font-weight: 400; color: var(--mut); margin-top: 3px; }
+#quizOpts { display: flex; flex-direction: column; gap: 6px; }
+#quizOpts button { padding: 9px 12px; font-size: 12.5px; text-align: left; border-radius: 10px; background: rgba(255,255,255,.06); border: 1px solid var(--line); transition: background .15s, border-color .15s; }
+#quizOpts button:hover { background: rgba(255,255,255,.14); }
+#quizOpts button.right { background: rgba(111,224,143,.25); border-color: rgba(111,224,143,.8); }
+#quizOpts button.wrong { background: rgba(255,69,58,.25); border-color: rgba(255,69,58,.8); }
+#asmProg { font-size: 12px; color: #d2d2d7; margin-top: 12px; font-variant-numeric: tabular-nums; }
+#asmNext { font-size: 15px; font-weight: 600; margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: rgba(41,151,255,.18); border: 1px solid rgba(41,151,255,.45); animation: asmpulse 1.8s ease-in-out infinite; }
+@keyframes asmpulse { 50% { box-shadow: 0 0 16px rgba(41,151,255,.35); } }
+body.mobile #quiz, body.mobile #asm { right: 10px; left: 10px; width: auto; top: auto; max-height: 78dvh; bottom: calc(env(safe-area-inset-bottom) + 14px); }
+body.keynote #quiz, body.keynote #asm { opacity: 0; pointer-events: none; }
+/* 部件大师防作弊：答题期间藏起部件列表与 hover 名牌 */
+body.quizing #parts, body.quizing #tip { display: none; }
+
+/* AR 模式：3D 画布本就透明，去掉页面底色即与实拍融合 */
+body.ar { background: none; }
+

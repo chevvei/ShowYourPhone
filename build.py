@@ -108,6 +108,7 @@ def build():
     tx_names = tex_exports((ROOT / "js" / "textures.js").read_text())
     geo = strip_exports(strip_imports((ROOT / "js" / "geo.js").read_text()))
     eggs = strip_exports(strip_imports((ROOT / "js" / "eggs.js").read_text()))
+    sfx = strip_exports(strip_imports((ROOT / "js" / "sfx.js").read_text()))
     mod = strip_exports(strip_imports((ROOT / "js" / "model.js").read_text()))
     # main 里的 postprocessing 导入保留（走 importmap data URL），其余（three / 本地模块）删除
     main = strip_imports(
@@ -119,7 +120,7 @@ def build():
     merged = (
         "import * as THREE from 'three';\n"
         "import { OrbitControls } from 'three/addons/controls/OrbitControls.js';\n\n"
-        + tex + "\n" + tx_obj + "\n" + geo + "\n" + eggs + "\n" + mod + "\n" + main
+        + tex + "\n" + tx_obj + "\n" + geo + "\n" + eggs + "\n" + sfx + "\n" + mod + "\n" + main
     )
 
     importmap = {

@@ -378,11 +378,15 @@ export function buildPhone(opts = {}) {
   }
 
   const smooth = (t) => t * t * (3 - 2 * t);
+  // 部件级爆炸覆盖：拆装挑战「逐个归位」与爆炸态「弹飞」需要单控某个部件的位移量，
+  // 未覆盖（undefined）的部件仍走全局 smooth 曲线
+  state.partK = null;
   function applyExplode() {
     const e = state.explode, N = parts.length;
     for (const p of parts) {
       const d = 0.3 * (p.order / N);
-      const k = smooth(THREE.MathUtils.clamp((e - d) / 0.7, 0, 1));
+      const k = state.partK && p.id in state.partK ? state.partK[p.id]
+        : smooth(THREE.MathUtils.clamp((e - d) / 0.7, 0, 1));
       p.k = k;
       for (const it of p.items) it.obj.position.copy(it.base).addScaledVector(it.dir, k);
     }
@@ -424,6 +428,9 @@ export function buildPhone(opts = {}) {
     root, parts, tex, M, state, update, setScheme, setFocus,
     setFold(th) { if (th !== state.fold) { state.fold = th; state.dirtyFold = true; } },
     setExplode(e) { state.explode = e; },
+    setPartK(id, k) { (state.partK ||= {})[id] = k; },
+    delPartK(id) { if (state.partK) delete state.partK[id]; },
+    clearPartK() { state.partK = null; },
     setDim(v) {
       state.dim = THREE.MathUtils.clamp(v, 0, 1);
       setFocus(state.lastFocus);
@@ -750,11 +757,15 @@ export function buildPhone18(opts = {}) {
   // ---------------- 状态（无折叠） ----------------
   const state = { fold: 0, explode: 0, dim: 0.04 };
   const smooth = (t) => t * t * (3 - 2 * t);
+  // 部件级爆炸覆盖：拆装挑战「逐个归位」与爆炸态「弹飞」需要单控某个部件的位移量，
+  // 未覆盖（undefined）的部件仍走全局 smooth 曲线
+  state.partK = null;
   function applyExplode() {
     const e = state.explode, N = parts.length;
     for (const p of parts) {
       const d = 0.3 * (p.order / N);
-      const k = smooth(THREE.MathUtils.clamp((e - d) / 0.7, 0, 1));
+      const k = state.partK && p.id in state.partK ? state.partK[p.id]
+        : smooth(THREE.MathUtils.clamp((e - d) / 0.7, 0, 1));
       p.k = k;
       for (const it of p.items) it.obj.position.copy(it.base).addScaledVector(it.dir, k);
     }
@@ -796,6 +807,9 @@ export function buildPhone18(opts = {}) {
     root, parts, tex, M, state, update, setScheme, setFocus,
     setFold() {},   // 直板机无折叠
     setExplode(e) { state.explode = e; },
+    setPartK(id, k) { (state.partK ||= {})[id] = k; },
+    delPartK(id) { if (state.partK) delete state.partK[id]; },
+    clearPartK() { state.partK = null; },
     setDim(v) {
       state.dim = THREE.MathUtils.clamp(v, 0, 1);
       setFocus(state.lastFocus);
