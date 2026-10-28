@@ -280,6 +280,8 @@ body.mobile.ui #touchHint, body.mobile.touched #touchHint, body.keynote #touchHi
 @media (max-width: 900px) {
   nav { display: none; }
   #hint { display: none; }
+  #cutBar { bottom: calc(env(safe-area-inset-bottom) + 96px); padding: 8px 12px; gap: 8px; }
+  #cutBar input[type="range"] { width: 34vw; }
 }
 @media (orientation: portrait) {
   body.mobile #parts { width: 38vw; padding-right: 4px; background: rgba(18,18,24,.78); }
@@ -399,6 +401,42 @@ body.ar #hint { opacity: 0; }
 /* ---------------- 录制状态 ---------------- */
 #btnRec.active { background: rgba(255, 69, 58, .42); border-color: rgba(255, 69, 58, .85); animation: recpulse 1.6s ease-in-out infinite; }
 @keyframes recpulse { 50% { box-shadow: 0 0 14px rgba(255, 69, 58, .5); } }
+
+/* ---------------- 视觉模式：X 光 / 蓝图 / 剖面 / 沉浸 ---------------- */
+#btnXray.active { background: rgba(77, 159, 255, .38); border-color: rgba(77, 159, 255, .85); }
+#btnBlue.active { background: rgba(143, 214, 255, .3); border-color: rgba(143, 214, 255, .8); }
+#btnCut.active { background: rgba(255, 159, 10, .38); border-color: rgba(255, 159, 10, .85); }
+#btnZen.active { background: rgba(175, 82, 222, .4); border-color: rgba(175, 82, 222, .85); }
+
+/* 剖面控制条：开启后从底部升起，与 dock 错层 */
+#cutBar {
+  position: fixed; left: 50%; bottom: 148px; transform: translateX(-50%) translateY(16px);
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-radius: 12px;
+  background: var(--glass); border: 1px solid var(--line);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 7;
+  opacity: 0; pointer-events: none; transition: opacity .35s, transform .4s cubic-bezier(.2,.8,.2,1);
+}
+#cutBar.on { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+#cutBar span { font-size: 11.5px; color: var(--mut); white-space: nowrap; }
+#cutBar b { font-size: 12px; min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+#cutBar input[type="range"] { width: 150px; accent-color: #ff9f0a; }
+body.zen #cutBar { opacity: 0; pointer-events: none; }
+
+/* 沉浸模式：全部 UI 淡出，纯渲染画面 + 展台自转 */
+body.zen #top, body.zen #dock, body.zen #parts, body.zen #info, body.zen #hint,
+body.zen #labels, body.zen #eggs, body.zen #eggBadge, body.zen #tip, body.zen #touchHint,
+body.zen #quiz, body.zen #asm, body.zen #custom, body.zen #kbar, body.zen #kctrl {
+  opacity: 0 !important; pointer-events: none !important;
+}
+#zenTip {
+  position: fixed; left: 50%; top: 26px; transform: translateX(-50%);
+  padding: 8px 18px; border-radius: 999px; font-size: 12.5px; letter-spacing: .04em;
+  background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(18px);
+  color: rgba(255,255,255,.82); z-index: 9; opacity: 0; pointer-events: none;
+  transition: opacity .8s; white-space: nowrap;
+}
+#zenTip.on { opacity: 1; transition: opacity .3s; }
+body:not(.zen) #zenTip { display: none; }
 
 /* ---------------- 部件大师 / 拆装挑战 面板 ---------------- */
 #quiz, #asm {

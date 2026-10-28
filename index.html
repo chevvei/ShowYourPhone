@@ -87,6 +87,11 @@
       <button id="btnRec" title="录制运镜视频并导出 WebM">⏺ 录制</button>
       <button id="btnAR" title="用摄像头实拍画面当背景，AR 体验">▣ AR</button>
       <button id="btnToss" title="把手机抛起来玩 (G)">⤒ 抛一下</button>
+      <button id="btnXray" title="X 光透视：外壳半透明，内部结构线框发光 (X)">⊨ X光</button>
+      <button id="btnBlue" title="工程蓝图模式：青色线框 + 网格背景 (B)">⧉ 蓝图</button>
+      <button id="btnCut" title="剖面切面：沿深度切开看内部堆叠 (C)">∪ 剖面</button>
+      <button id="btnZen" title="沉浸模式：全屏纯净画面 + 展台自转 (I)">⛶ 沉浸</button>
+      <button id="btnShare" title="复制分享链接：打开即还原当前设备/环境/爆炸度">⇗ 分享</button>
     </div>
     <div class="views">
       <button data-view="hero">总览</button>
@@ -209,7 +214,12 @@
   <div id="kbar"><div id="kProgress"></div></div>
   <div id="kctrl"><span id="kChapter"></span><button id="kExit">退出演示 Esc</button></div>
 
-  <div id="hint">拖拽旋转 · 滚轮缩放 · E 爆炸 · F 开合 · L 标注 · K 演示 · Q 部件大师 · G 抛掷 · 爆炸态双击部件弹飞</div>
+  <div id="hint">拖拽旋转 · 滚轮缩放 · E 爆炸 · F 开合 · L 标注 · K 演示 · Q 部件大师 · G 抛掷 · X 光 · B 蓝图 · C 剖面 · I 沉浸 · 爆炸态双击部件弹飞</div>
+
+  <!-- 剖面切面控制条：开启剖面后浮在底部中央 -->
+  <div id="cutBar"><span>∪ 剖面深度</span><input id="cutDepth" type="range" min="0" max="100" value="35" step="1" /><b id="cutPct">35%</b></div>
+  <!-- 沉浸模式退出提示：进入后短暂显示，静置淡出 -->
+  <div id="zenTip">⛶ 沉浸模式 · 点击任意处或按 Esc 退出</div>
   <div id="touchHint">左半屏出部件 · 右半屏出控制 · 单指旋转 · 双指缩放</div>
 
   <div id="loader">

@@ -122,7 +122,8 @@ scene.add(key);
 const rim = new THREE.DirectionalLight(ENVS.studio.rim[0], ENVS.studio.rim[1]);
 rim.position.set(250, 120, -300);
 scene.add(rim);
-scene.add(new THREE.HemisphereLight(0xffffff, 0x202020, 0.35));
+const hemi = new THREE.HemisphereLight(0xffffff, 0x202020, 0.35);
+scene.add(hemi);
 
 // 后处理：UnrealBloom 泛光——常态只给屏幕高光一点辉光（阈值以上才生效，几乎无感），
 // 找齐全部隐藏细节后短暂增强，让虹彩中框 / 彩带 / 灵动岛流光“炸”开
@@ -323,6 +324,7 @@ canvas.addEventListener('pointerup', (e) => {
   const moved = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]);
   downAt = null;
   if (moved > (e.pointerType === 'touch' ? 10 : 4)) return;
+  if (zen.on) { toggleZen(false); return; }   // 沉浸模式：轻点任意处退出
   mouse.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   pick();
   // 拆装挑战进行中：所有点击都交给装配逻辑（判对/判错），不走部件选择
@@ -352,7 +354,7 @@ canvas.addEventListener('dblclick', (e) => {
 // 移动端：触碰哪半边就滑出哪一侧（部件栏 / 控制坞不同时占屏），静置 5 秒自动收起
 let uiTimer = 0;
 function pokeUI(e) {
-  if (!document.body.classList.contains('mobile') || S.keynote) return;
+  if (!document.body.classList.contains('mobile') || S.keynote || zen.on) return;
   document.body.classList.add('ui', 'touched');
   if (e && e.clientX !== undefined) {
     const left = e.clientX < innerWidth * 0.5;
@@ -536,6 +538,7 @@ function bindUI() {
   addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (S.keynote) stopKeynote();
+      else if (zen.on) toggleZen(false);
       else if ($('#custom').classList.contains('on')) $('#custom').classList.remove('on');
       else if (quiz.on) toggleQuiz(false);
       else if ($('#asm').classList.contains('on')) toggleAsm(false);
@@ -550,6 +553,10 @@ function bindUI() {
     if (e.key === 'l' || e.key === 'L') $('#btnLabels').click();   // 标注 隐藏/显示
     if (e.key === 'q' || e.key === 'Q') toggleQuiz();              // 部件大师
     if (e.key === 'g' || e.key === 'G') tossPhone();               // 抛一下
+    if (e.key === 'x' || e.key === 'X') setVisMode('xray');        // X 光透视
+    if (e.key === 'b' || e.key === 'B') setVisMode('blueprint');   // 蓝图
+    if (e.key === 'c' || e.key === 'C') setCut(!cut.on);           // 剖面
+    if (e.key === 'i' || e.key === 'I') toggleZen();               // 沉浸
   });
 }
 
@@ -1349,6 +1356,8 @@ function switchDevice(dev) {
   if ($('#asm').classList.contains('on')) toggleAsm(false);
   if (ar.on) toggleAR();
   if (phys.on) { phys.on = false; stage.position.set(0, 0, 0); stage.rotation.set(0, 0, 0); }
+  if (vis !== 'off') setVisMode('off');   // 旧模型的材质 swap 随旧 root 一起退役
+  if (cut.on) setCut(false);
   kicks.clear();
   cancelTweens();
   CUR = dev;
@@ -1357,7 +1366,7 @@ function switchDevice(dev) {
   document.querySelectorAll('#devTabs button').forEach((b) => b.classList.toggle('active', b.dataset.dev === dev));
   $('#brandName').textContent = D.name;
   document.title = `${D.name} · 3D 爆炸图`;
-  $('#hint').textContent = '拖拽旋转 · 滚轮缩放 · 右键平移 · E 爆炸 · F 开合 · L 标注 · K 演示 · Q 部件大师 · G 抛掷 · 爆炸态双击部件弹飞';
+  $('#hint').textContent = '拖拽旋转 · 滚轮缩放 · 右键平移 · E 爆炸 · F 开合 · L 标注 · K 演示 · Q 部件大师 · G 抛掷 · X 光 · B 蓝图 · C 剖面 · I 沉浸 · 爆炸态双击部件弹飞';
   sfx('whoosh'); buzz(10);
   // 模型热替换（首次切换才构建，之后走缓存）
   // 顺序：先构建成功再摘下旧模型，构建异常时保留旧画面而不是空场景
@@ -1811,6 +1820,100 @@ function tickKicks(dt) {
   }
 }
 
+// ---------------- 视觉模式：X 光 / 蓝图 / 剖面 / 沉浸 / 分享链接 ----------------
+// X 光：外壳（机身/屏幕类）换半透明加色幽灵材质、内部结构件换发光线框，
+// 合上也能透视主板电池。用材质 swap 而非改属性——model.update() 每帧
+// 管理原材质的 opacity/depthWrite，swap 后互不干扰，还原零残留。
+const xrayShellMat = new THREE.MeshBasicMaterial({ color: 0x4d9fff, transparent: true, opacity: 0.10, blending: THREE.AdditiveBlending, depthWrite: false });
+const xrayCoreMat = new THREE.MeshBasicMaterial({ color: 0x00ffd5, wireframe: true, transparent: true, opacity: 0.55 });
+const bpMat = new THREE.MeshBasicMaterial({ color: 0x8fd6ff, wireframe: true });
+const bpGrid = new THREE.GridHelper(1400, 70, 0x1c4d7d, 0x0e2a4a);
+bpGrid.position.y = -150;
+bpGrid.visible = false;
+scene.add(bpGrid);
+let vis = 'off';
+const shellOf = (p) => p.cat === 'body' || p.cat === 'display';
+function setVisMode(mode) {
+  if (vis === mode) mode = 'off';           // 再点一次关闭
+  if (mode !== 'off') setCut(false);        // 三种视觉模式互斥：剖面作用于原材质
+  vis = mode;
+  for (const p of model.parts) for (const m of p.meshes) {
+    if (vis === 'off') {
+      if (m.userData._vm) { m.material = m.userData._vm; delete m.userData._vm; }
+    } else {
+      m.userData._vm ||= m.material;
+      m.material = vis === 'xray' ? (shellOf(p) ? xrayShellMat : xrayCoreMat) : bpMat;
+    }
+  }
+  bpGrid.visible = vis === 'blueprint';
+  scene.background = vis === 'blueprint' ? new THREE.Color(0x08172c) : null;
+  shadow.visible = vis !== 'blueprint';
+  key.visible = rim.visible = hemi.visible = vis === 'off';   // 幽灵/线框材质不吃光照，顺手省开销
+  $('#btnXray').classList.toggle('active', vis === 'xray');
+  $('#btnBlue').classList.toggle('active', vis === 'blueprint');
+  if (vis !== 'off') { sfx(vis === 'xray' ? 'whoosh' : 'ui'); buzz(8); }
+}
+
+// 剖面切面：clipping plane 沿机身深度方向（z 轴）从背板往屏幕推进，
+// 保留 z >= threshold 一侧（屏幕朝 +z）；k=0 完整机身，k=1 切到只剩屏幕
+const cutPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 80);
+const cut = { on: false, k: 0.35 };
+function setCut(on) {
+  if (cut.on === on) return;
+  if (on) setVisMode('off');
+  cut.on = on;
+  renderer.localClippingEnabled = on;
+  for (const p of model.parts) for (const m of p.mats) m.clippingPlanes = on ? [cutPlane] : null;
+  $('#cutBar').classList.toggle('on', on);
+  $('#btnCut').classList.toggle('active', on);
+  if (on) { setCutDepth(cut.k); sfx('snap'); buzz(8); }
+}
+function setCutDepth(k) {
+  cut.k = k;
+  cutPlane.constant = THREE.MathUtils.lerp(80, -40, k);   // 保留侧阈值：-80(全留) → 40(切穿屏幕)
+  $('#cutPct').textContent = Math.round(k * 100) + '%';
+  $('#cutDepth').value = Math.round(k * 100);
+}
+
+// 沉浸模式：UI 全隐 + 展台自转 + 全屏 API，点任意处或 Esc 退出
+const zen = { on: false, t: 0 };
+function toggleZen(force) {
+  const want = force !== undefined ? force : !zen.on;
+  if (want === zen.on) return;
+  zen.on = want;
+  document.body.classList.toggle('zen', want);
+  $('#btnZen').classList.toggle('active', want);
+  if (want) {
+    sfx('whoosh'); buzz(10);
+    document.documentElement.requestFullscreen?.().catch(() => {});
+    const tip = $('#zenTip');
+    tip.classList.add('on');
+    clearTimeout(zen.t);
+    zen.t = setTimeout(() => tip.classList.remove('on'), 3400);
+  } else if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+// 用户直接 Esc 退全屏（浏览器手势）时同步状态，防止「半沉浸」残留
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && zen.on) toggleZen(false); });
+
+// 分享链接：把设备/环境/配色/爆炸度编码进 URL，打开即还原现场
+function shareLink() {
+  const u = new URL(location.href);
+  for (const k of [...u.searchParams.keys()]) u.searchParams.delete(k);
+  u.hash = '';
+  u.searchParams.set('dev', CUR);
+  if (curEnv !== 'studio') u.searchParams.set('env', curEnv);
+  if (S.scheme !== 'white') u.searchParams.set('sch', S.scheme);
+  if (S.explode > 0.02) u.searchParams.set('ex', (+S.explode).toFixed(2));
+  const url = u.toString();
+  (navigator.clipboard?.writeText(url) || Promise.reject()).then(
+    () => toastMsg('⇗ 分享链接已复制 · 打开即还原当前状态'),
+    () => toastMsg(url));
+  sfx('pop'); buzz(8);
+  return url;
+}
+
 // ---------------- 新玩法按钮绑定 ----------------
 function bindFun() {
   const sb = $('#btnSfx');
@@ -1839,15 +1942,30 @@ function bindFun() {
   $('#btnRec').onclick = toggleRec;
   $('#btnAR').onclick = toggleAR;
   $('#btnToss').onclick = tossPhone;
+  $('#btnXray').onclick = () => setVisMode('xray');
+  $('#btnBlue').onclick = () => setVisMode('blueprint');
+  $('#btnCut').onclick = () => setCut(!cut.on);
+  $('#btnZen').onclick = () => toggleZen();
+  $('#btnShare').onclick = shareLink;
+  $('#cutDepth').oninput = (e) => setCutDepth(e.target.value / 100);
 }
 
 // 测试探针：新玩法状态（e2e 断言用）
 window.__fun = () => ({
-  env: curEnv, sfx: !sfxMuted(),
+  env: curEnv, sfx: !sfxMuted(), ex: S.explode,
+  vis, cutOn: cut.on, cutK: cut.k, zen: zen.on,
   quiz: { on: quiz.on, mode: quiz.mode, streak: quiz.streak, best: quiz.best, ans: quiz.ans, ansName: model.parts.find((p) => p.id === quiz.ans)?.name },
   asm: { on: asm.on, left: asm.queue.length, done: asm.done, total: asm.total, next: asm.queue[0] || null, nextName: model.parts.find((p) => p.id === asm.queue[0])?.name },
   phys: phys.on, rec: rec.on, ar: ar.on, wallW: DEV().screens[DEV().tabs[0][0]][0],
+  bg: scene.background ? '#' + scene.background.getHexString() : null, grid: bpGrid.visible,
 });
+window.__share = shareLink;
+// 材质 swap 抽样：外壳件 / 内部件各取首个 mesh 的当前材质特征（e2e 断言 X 光/蓝图生效）
+window.__mats = () => {
+  const body = model.parts.find((p) => shellOf(p)), core = model.parts.find((p) => !shellOf(p));
+  const f = (p) => { const m = p?.meshes[0]?.material; return m ? { wire: !!m.wireframe, color: '#' + m.color?.getHexString() } : null; };
+  return { body: f(body), core: f(core) };
+};
 
 // ---------------- 主循环 ----------------
 const clock = new THREE.Clock();
@@ -1855,7 +1973,7 @@ let fpsAcc = 0, fpsN = 0;
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
   runTweens(dt);
-  controls.autoRotate = S.auto && !S.keynote;
+  controls.autoRotate = (S.auto || zen.on) && !S.keynote;   // 沉浸模式 = 展台自转
   controls.update();
 
   model.setFold(S.fold);
@@ -1959,11 +2077,17 @@ async function boot() {
   const q = new URLSearchParams(location.search);
   const qdev = DEVICES[q.get('dev')] ? q.get('dev') : null;
   if (qdev && qdev !== 'duo') switchDevice(qdev);
+  // 分享链接状态还原：环境 / 配色 / 爆炸度（打开即还原现场，并跳过开场演示）
+  const shared = qdev || q.has('env') || q.has('ex') || q.has('sch');
+  if (ENVS[q.get('env')]) setEnv(q.get('env'));
+  if (q.get('sch')) setScheme(q.get('sch'));
+  const exq = parseFloat(q.get('ex'));
+  if (!isNaN(exq)) setExplode(exq);
   // ?eggs / #eggs：彩蛋工坊专属直链（移动端无键盘也能直达定制页），并跳过开场演示
   const eggDirect = q.has('eggs') || location.hash === '#eggs';
   // 首次打开（或 ?demo）：像宣传片一样自动播放发布会演示，Esc / 「退出演示」可随时打断
   const SEEN = 'iphoneDuo.seen';
-  const first = (!localStorage.getItem(SEEN) || q.has('demo')) && !eggDirect;
+  const first = (!localStorage.getItem(SEEN) || q.has('demo')) && !eggDirect && !shared;
   if (first) {
     localStorage.setItem(SEEN, '1');
     setFold(PI); setExplode(0);
