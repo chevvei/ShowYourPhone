@@ -329,10 +329,24 @@ addEventListener('pointermove', (e) => {
 }, { passive: true });
 
 let lastHit = null;   // 最近一次射线命中（pointerup 用它的 uv 做屏幕内交互）
+// 盖板玻璃 → 屏幕 穿透表：玻璃盒体挡在屏幕前且自身 UV 无意义，
+// 命中玻璃时用同一条射线再打屏幕取 UV（hover/选中仍是玻璃部件本身）
+const GLASS_THROUGH = {
+  duo: { cover: 'oled' },
+  p18s: { frontGlass: 'screen' }, p18: { frontGlass: 'screen' }, p18m: { frontGlass: 'screen' },
+};
 function pick() {
   ray.setFromCamera(mouse, camera);
   const hit = ray.intersectObjects(model.pickables(), false)[0];
   lastHit = hit || null;
+  if (hit) {
+    const through = (GLASS_THROUGH[CUR] || {})[hit.object.userData.partId];
+    if (through) {
+      const scr = model.parts.find((p) => p.id === through);
+      const h2 = scr && ray.intersectObjects(scr.meshes, false)[0];
+      if (h2) lastHit = h2;   // 屏幕命中替换玻璃命中，拿到映射锁屏纹理的 UV
+    }
+  }
   hovered = hit ? model.parts.find((p) => p.id === hit.object.userData.partId) : null;
   canvas.style.cursor = hovered ? 'pointer' : 'grab';
   const tip = $('#tip');
@@ -350,6 +364,57 @@ canvas.addEventListener('pointermove', (e) => {
 const SCREEN_LOCKS = {
   duo: { oled: 'inner', outer: 'outer' },
   p18s: { screen: 'phone' }, p18: { screen: 'phone' }, p18m: { screen: 'phone' },
+};
+// 测试探针：暴露各设备锁屏实例的 ui 状态（lock/grid/view），供 e2e 断言屏幕内交互
+window.__locks = () => Object.fromEntries(Object.entries(DEVICES).map(([k, d]) => [k, Object.fromEntries(Object.entries(d.locks).map(([t, l]) => [t, l.ui]))]));
+// 测试探针：在指定像素做一次与生产代码完全一致的射线检测（含盖板穿透），返回命中的部件与屏幕 UV
+window.__ray = (px, py) => {
+  const m = new THREE.Vector2((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
+  ray.setFromCamera(m, camera);
+  const hit = ray.intersectObjects(model.pickables(), false)[0];
+  if (!hit) return null;
+  const through = (GLASS_THROUGH[CUR] || {})[hit.object.userData.partId];
+  let partId = hit.object.userData.partId, uv = hit.uv;
+  if (through) {
+    const scr = model.parts.find((p) => p.id === through);
+    const h2 = scr && ray.intersectObjects(scr.meshes, false)[0];
+    if (h2) { partId = h2.object.userData.partId; uv = h2.uv; }
+  }
+  return { partId, uv: uv ? { x: uv.x, y: uv.y } : null };
+};
+// 测试探针：指定像素的完整命中序列（部件/UV/距离），调试盖板穿透用
+window.__hits = (px, py) => {
+  const m = new THREE.Vector2((px / innerWidth) * 2 - 1, -(py / innerHeight) * 2 + 1);
+  ray.setFromCamera(m, camera);
+  return ray.intersectObjects(model.pickables(), false).slice(0, 4).map((h) => ({
+    partId: h.object.userData.partId,
+    uv: h.uv ? { x: +h.uv.x.toFixed(3), y: +h.uv.y.toFixed(3) } : null,
+    d: +h.distance.toFixed(2),
+  }));
+};
+// 测试探针：相机/模型状态快照（取证特写后视角漂移）
+window.__state = () => ({
+  fold: +S.fold.toFixed(4), explode: +S.explode.toFixed(4), selected: S.selected,
+  cam: camera.position.toArray().map((v) => +v.toFixed(1)),
+  tgt: controls.target.toArray().map((v) => +v.toFixed(1)),
+});
+// 测试探针：直接设置相机位（特写前先转到目标朝向，如外屏需从 -z 看）
+window.__setCam = (x, y, z) => { camera.position.set(x, y, z); controls.target.set(0, 0, 0); controls.update(); };
+// 测试探针：屏幕部件包围盒投影到像素坐标，供 e2e 计算屏幕内按钮的点击位置
+window.__screenRect = (partId) => {
+  const p = model?.parts?.find((q) => q.id === partId);
+  if (!p) return null;
+  const box = new THREE.Box3();
+  for (const m of p.meshes) box.expandByObject(m);
+  if (box.isEmpty()) return null;
+  const c = box.getCenter(new THREE.Vector3()), s = box.getSize(new THREE.Vector3());
+  const v = new THREE.Vector3();
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const dx of [-1, 1]) for (const dy of [-1, 1]) for (const dz of [-1, 1]) {
+    v.set(c.x + (s.x * dx) / 2, c.y + (s.y * dy) / 2, c.z + (s.z * dz) / 2).project(camera);
+    x0 = Math.min(x0, v.x); x1 = Math.max(x1, v.x); y0 = Math.min(y0, v.y); y1 = Math.max(y1, v.y);
+  }
+  return { x: (x0 * 0.5 + 0.5) * innerWidth, y: (-y1 * 0.5 + 0.5) * innerHeight, w: ((x1 - x0) * 0.5) * innerWidth, h: ((y1 - y0) * 0.5) * innerHeight };
 };
 
 function selectPart(id, fly) {
