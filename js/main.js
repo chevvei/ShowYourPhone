@@ -373,37 +373,53 @@ canvas.addEventListener('dblclick', (e) => {
   kickPart(hovered.id);
 });
 
-// 移动端：触碰哪半边就滑出哪一侧（部件栏 / 控制坞不同时占屏），静置 5 秒自动收起
+// 移动端：右半屏轻点出控制坞，静置 5 秒自动收起；部件栏改为左缘拉手手动拉出（见下）
 let uiTimer = 0;
 function pokeUI(e) {
   if (!document.body.classList.contains('mobile') || S.keynote || zen.on) return;
   document.body.classList.add('ui', 'touched');
-  if (e && e.clientX !== undefined) {
-    const left = e.clientX < innerWidth * 0.5;
-    document.body.classList.toggle('uiL', left);
-    document.body.classList.toggle('uiR', !left);
-  }
+  // 右半屏轻点出控制坞；部件抽屉（uiL）只由左缘拉手手动唤出，不跟半屏轻点弹出
+  if (e && e.clientX !== undefined) document.body.classList.toggle('uiR', e.clientX > innerWidth * 0.5);
   clearTimeout(uiTimer);
-  uiTimer = setTimeout(() => document.body.classList.remove('ui', 'uiL', 'uiR'), 5000);
+  uiTimer = setTimeout(() => document.body.classList.remove('ui', 'uiR'), 5000);
 }
 for (const ev of ['pointerdown', 'touchstart', 'input']) addEventListener(ev, pokeUI, { capture: true, passive: true });
 for (const el of ['#parts', '#dock']) $(el).addEventListener('scroll', pokeUI, { passive: true });
 
-// 桌面端：鼠标贴左缘 / 底缘滑出侧栏与底栏，离开后自动隐藏——与移动端同为全屏沉浸
-let edgeTimer = 0;
-addEventListener('pointermove', (e) => {
-  if (document.body.classList.contains('mobile') || S.keynote) return;
-  const nearL = e.clientX < 28, nearB = e.clientY > innerHeight - 28;
-  if (!nearL && !nearB && e.clientX > 320 && e.clientY < innerHeight - 220) {
-    // 远离两块面板：延时收起（期间移回可取消）
-    clearTimeout(edgeTimer);
-    edgeTimer = setTimeout(() => document.body.classList.remove('edgeL', 'edgeB'), 2400);
-    return;
+// —— 部件抽屉（手机端）：左缘拉手点击 / 侧滑拉出，点抽屉外或左滑收起，全程手动不自动收 ——
+// 桌面端屏幕大，侧栏与底栏常驻显示，不再做贴边悬停自动隐藏
+let sbGuideT = 0;
+const sbOpen = (v) => {
+  document.body.classList.toggle('uiL', v);
+  if (v) {
+    clearTimeout(sbGuideT);
+    document.body.classList.remove('nudge');
+    $('#sbGuide').classList.remove('on');
   }
-  clearTimeout(edgeTimer);
-  if (nearL) document.body.classList.add('edgeL');
-  if (nearB) document.body.classList.add('edgeB');
+};
+const showSbGuide = () => {
+  if (!document.body.classList.contains('mobile')) return;
+  document.body.classList.add('nudge');
+  $('#sbGuide').classList.add('on');
+  clearTimeout(sbGuideT);
+  sbGuideT = setTimeout(() => { document.body.classList.remove('nudge'); $('#sbGuide').classList.remove('on'); }, 8000);
+};
+$('#sbEdge').addEventListener('click', () => sbOpen(true));
+let sbX0 = null;
+$('#sbEdge').addEventListener('pointerdown', (e) => { sbX0 = e.clientX; }, { passive: true });
+addEventListener('pointermove', (e) => { if (sbX0 !== null && e.clientX - sbX0 > 36) { sbX0 = null; sbOpen(true); } }, { passive: true });
+// 抽屉打开时点到抽屉外任意处 → 收起（拉手 / 面板本体 / 顶部栏 / 信息卡不算「外」）
+addEventListener('pointerdown', (e) => {
+  if (!document.body.classList.contains('mobile') || !document.body.classList.contains('uiL')) return;
+  if (!e.target.closest('#parts,#sbEdge,#sbGuide,#top,#info')) sbOpen(false);
+}, true);
+// 抽屉上快速左滑 → 收起（与列表纵向滚动区分：横向位移大、纵向位移小）
+let sbCX = null, sbCY = 0;
+$('#parts').addEventListener('pointerdown', (e) => { sbCX = e.clientX; sbCY = e.clientY; }, { passive: true });
+addEventListener('pointermove', (e) => {
+  if (sbCX !== null && sbCX - e.clientX > 48 && Math.abs(e.clientY - sbCY) < 30) { sbCX = null; sbOpen(false); }
 }, { passive: true });
+for (const ev of ['pointerup', 'pointercancel']) addEventListener(ev, () => { sbX0 = null; sbCX = null; }, { passive: true });
 
 let lastHit = null;   // 最近一次射线命中（pointerup 用它的 uv 做屏幕内交互）
 // 盖板玻璃 → 屏幕 穿透表：玻璃盒体挡在屏幕前且自身 UV 无意义，
@@ -1485,6 +1501,7 @@ function stopKeynote() {
   controls.enabled = true;
   setShift(false);
   model.setFocus(S.selected ? [S.selected] : null);
+  showSbGuide();   // 首次开机的发布会演示结束后，手机端补一轮左缘拉手引导
 }
 
 // ================================================================
@@ -2587,6 +2604,7 @@ async function boot() {
   loaderDone = true;
   $('#loader').classList.add('done');
   requestAnimationFrame(frame);
+  showSbGuide();   // 手机端进场引导：loader 一结束就亮拉手 + 气泡（不等开场展开动画）
   // URL ?dev= 直达指定设备（分享直链 / 无障碍入口），需在 keynote 之前切换
   const q = new URLSearchParams(location.search);
   const qdev = DEVICES[q.get('dev')] ? q.get('dev') : null;

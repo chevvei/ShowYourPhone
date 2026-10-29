@@ -34,9 +34,14 @@ try {
   await new Promise((r) => setTimeout(r, 5000));
   await page.keyboard.press('Escape');          // 退出自动演示
   await new Promise((r) => setTimeout(r, 600));
-  // 静置后侧栏自动隐藏（桌面端贴边机制）—— headless 无 hover:hover，仅环境提示
+  // 桌面端：侧栏 / 底栏常驻显示（大屏无需隐藏，旧贴边悬停机制已移除）
   await new Promise((r) => setTimeout(r, 3000));
-  console.log('[ui] 桌面贴边自动隐藏: SKIP(headless 不匹配 hover:hover 媒体查询，真机已由 CSS 保证)');
+  const deskVis = await page.evaluate(() => {
+    const p = getComputedStyle(document.querySelector('#parts'));
+    const d = getComputedStyle(document.querySelector('#dock'));
+    return { p: p.opacity, d: d.opacity, pe: p.pointerEvents };
+  });
+  console.log(`[ui] 桌面侧栏/底栏常驻: ${deskVis.p === '1' && deskVis.d === '1' && deskVis.pe !== 'none' ? 'OK' : `FAIL ${JSON.stringify(deskVis)}`}`);
 
   // ---- 隐藏入口：连点设备名 5 次 → 彩蛋工坊 ----
   const brand = await page.$('#brandName');
@@ -69,7 +74,7 @@ try {
   const fx = await page.evaluate(() => JSON.parse(localStorage.getItem('iphoneDuo.eggs') || '{}').fx);
   console.log(`[egg] fx 持久化: ${fx === true ? 'OK' : 'FAIL'}`);
 
-  // ---- 移动端仿真：一次只滑出一侧（用户诉求：两侧同开时中间不足 1/4）----
+  // ---- 移动端仿真：部件抽屉改为左缘拉手手动拉出 + 进场引导；控制坞仍是右半屏轻点 ----
   await page.emulate({
     viewport: { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
@@ -81,17 +86,37 @@ try {
   await new Promise((r) => setTimeout(r, 600));
   const isMobileBody = await page.evaluate(() => document.body.classList.contains('mobile'));
   const tap = async (x, y) => { await page.touchscreen.tap(x, y); await new Promise((r) => setTimeout(r, 500)); };
-  await tap(60, 400);   // 左半屏 → 部件栏
-  let side = await page.evaluate(() => ({ L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR') }));
-  console.log(`[ui] 手机左半屏=部件栏: ${side.L && !side.R ? 'OK' : `FAIL ${JSON.stringify(side)}`} (mobile=${isMobileBody})`);
+  // 进场引导：拉手浮现 + 气泡提示（8 秒后自动淡出）
+  let guide = await page.evaluate(() => document.querySelector('#sbGuide').classList.contains('on')
+    && document.body.classList.contains('nudge'));
+  console.log(`[ui] 手机进场引导浮现: ${guide ? 'OK' : 'FAIL'} (mobile=${isMobileBody})`);
+  await page.screenshot({ path: '/tmp/egg_mobile_guide.png' });
+  await tap(10, 400);   // 左缘拉手 → 拉出部件抽屉
+  let side = await page.evaluate(() => ({
+    L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR'),
+    g: document.querySelector('#sbGuide').classList.contains('on'),
+  }));
+  console.log(`[ui] 左缘拉手拉出部件抽屉: ${side.L && !side.R && !side.g ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
+  await page.screenshot({ path: '/tmp/egg_mobile_drawer.png' });
+  await tap(330, 400);  // 点抽屉外 → 收起抽屉（同时右半屏出控制坞）
+  side = await page.evaluate(() => ({ L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR') }));
+  console.log(`[ui] 点抽屉外收起: ${!side.L ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
+  await tap(60, 400);   // 左半屏普通点按：不再弹出部件栏（新交互：只认左缘拉手）
+  side = await page.evaluate(() => document.body.classList.contains('uiL'));
+  console.log(`[ui] 左半屏点按不再弹抽屉: ${!side ? 'OK' : 'FAIL'}`);
   await tap(330, 400);  // 右半屏 → 控制坞
   side = await page.evaluate(() => ({ L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR') }));
   console.log(`[ui] 手机右半屏=控制坞: ${side.R && !side.L ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
   await page.screenshot({ path: '/tmp/egg_mobile_right.png' });
-  await new Promise((r) => setTimeout(r, 5600));   // 静置超时自动收起
-  const gone = await page.evaluate(() => !document.body.classList.contains('uiL') && !document.body.classList.contains('uiR'));
-  console.log(`[ui] 手机 5s 自动收起: ${gone ? 'OK' : 'FAIL'}`);
-  await page.screenshot({ path: '/tmp/egg_mobile_hidden.png' });
+  await new Promise((r) => setTimeout(r, 5600));   // 静置：控制坞 5s 自动收起，抽屉不自动收
+  const gone = await page.evaluate(() => !document.body.classList.contains('uiR'));
+  console.log(`[ui] 手机控制坞 5s 自动收起: ${gone ? 'OK' : 'FAIL'}`);
+  await tap(10, 400);   // 再次拉出抽屉 → 静置验证：手动抽屉不会被超时收起
+  await new Promise((r) => setTimeout(r, 5600));
+  const stay = await page.evaluate(() => document.body.classList.contains('uiL'));
+  console.log(`[ui] 抽屉手动收起不自动: ${stay ? 'OK' : 'FAIL'}`);
+  await page.screenshot({ path: '/tmp/egg_mobile_stay.png' });
+  await tap(330, 400);  // 收起抽屉还原
   // 还原桌面环境
   await page.emulate({
     viewport: { width: 1440, height: 900, isMobile: false, hasTouch: false, deviceScaleFactor: 1 },

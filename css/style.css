@@ -262,11 +262,11 @@ body.mobile .label.detail .s { font-size: 10px; }
 body.mobile #caption { bottom: calc(env(safe-area-inset-bottom) + 6vh); }
 body.mobile #kctrl { top: calc(env(safe-area-inset-top) + 8px); right: calc(env(safe-area-inset-right) + 12px); }
 
-/* 隐藏态：仅保留 3D 画面；两侧面板一次只出一侧（uiL/uiR），中间模型不被挤压 */
-body.mobile:not(.ui) #top { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+/* 隐藏态：仅保留 3D 画面；部件抽屉（uiL）由左缘拉手手动唤出，控制坞（uiR）右半屏轻点 */
+body.mobile:not(.ui):not(.uiL) #top { opacity: 0; transform: translateY(-100%); pointer-events: none; }
 body.mobile:not(.uiL) #parts { opacity: 0; transform: translateX(-104%); pointer-events: none; }
 body.mobile:not(.uiR) #dock { opacity: 0; transform: translateX(104%); pointer-events: none; }
-body.mobile:not(.ui) #info { opacity: 0; pointer-events: none; }
+body.mobile:not(.ui):not(.uiL) #info { opacity: 0; pointer-events: none; }
 body.mobile #parts, body.mobile #dock, body.mobile #top { transition: opacity .35s, transform .45s cubic-bezier(.2,.8,.2,1); }
 body.mobile.ui #labels, body.mobile.ui #leaders { opacity: .35; transition: opacity .3s; }
 body.mobile.keynote #dock, body.mobile.keynote #parts, body.mobile.keynote #top { opacity: 0; pointer-events: none; }
@@ -366,27 +366,33 @@ body.keynote #eggs { opacity: 0; pointer-events: none; }
 #eggToast.on { opacity: 1; transform: translate(-50%, 0); }
 body.mobile #eggToast { top: calc(env(safe-area-inset-top) + 54px); white-space: normal; text-align: center; }
 
-/* ---------------- 桌面端贴边滑出：侧栏 / 底栏自动隐藏，全屏沉浸 ---------------- */
-@media (hover: hover) and (pointer: fine) {
-  body:not(.mobile) #parts, body:not(.mobile) #dock { transition: opacity .35s, transform .45s cubic-bezier(.2,.8,.2,1); }
-  body:not(.mobile):not(.keynote) #parts { opacity: 0; transform: translateX(-108%); pointer-events: none; }
-  body:not(.mobile):not(.keynote) #dock { opacity: 0; transform: translate(-50%, 135%); pointer-events: none; }
-  body.edgeL #parts { opacity: 1; transform: none; pointer-events: auto; }
-  body.edgeB #dock { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
-  /* 边缘微光提示：哪里藏着面板 */
-  body:not(.mobile):not(.keynote):not(.edgeL)::before,
-  body:not(.mobile):not(.keynote):not(.edgeB)::after {
-    content: ""; position: fixed; z-index: 4; pointer-events: none; opacity: .55; transition: opacity .3s;
-  }
-  body:not(.mobile):not(.keynote):not(.edgeL)::before {
-    left: 0; top: 0; bottom: 0; width: 3px;
-    background: linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.04) 40%, rgba(255,255,255,.2));
-  }
-  body:not(.mobile):not(.keynote):not(.edgeB)::after {
-    left: 0; right: 0; bottom: 0; height: 3px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,.16), transparent);
-  }
+/* ---------------- 手机端左缘拉手 + 进场引导（桌面大屏侧栏常驻，不做自动隐藏） ---------------- */
+#sbEdge { position: fixed; left: 0; top: 0; bottom: 0; width: 24px; z-index: 5; display: none; touch-action: none; cursor: pointer; }
+#sbEdge i {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 76px; display: flex; align-items: center; justify-content: center;
+  font-style: normal; font-size: 13px; color: rgba(255,255,255,.82);
+  background: rgba(24,24,32,.82); border: 1px solid rgba(255,255,255,.14); border-left: 0;
+  border-radius: 0 14px 14px 0;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  box-shadow: 3px 0 14px rgba(0,0,0,.32);
 }
+body.mobile:not(.uiL):not(.keynote):not(.zen):not(.quizing) #sbEdge { display: block; }
+body.mobile.nudge #sbEdge i { animation: sbNudge 1.5s ease-in-out infinite; }
+@keyframes sbNudge { 0%, 100% { transform: translateY(-50%) translateX(0); } 50% { transform: translateY(-50%) translateX(6px); } }
+#sbGuide {
+  position: fixed; left: 34px; top: 50%; z-index: 5; padding: 8px 14px; border-radius: 999px;
+  font-size: 12px; letter-spacing: .04em; color: #ffe9b8; white-space: nowrap;
+  background: rgba(26,22,14,.88); border: 1px solid rgba(255,215,106,.35);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  opacity: 0; pointer-events: none;
+  transform: translateY(-50%) translateX(-10px);
+  transition: opacity .45s, transform .45s;
+}
+#sbGuide.on { opacity: 1; transform: translateY(-50%) translateX(0); }
+body:not(.mobile) #sbEdge, body:not(.mobile) #sbGuide,
+body.keynote #sbGuide, body.zen #sbGuide, body.quizing #sbGuide,
+body.mobile.uiL #sbGuide { display: none; }
 
 /* ---------------- 环境光场（影棚 / 日落 / 霓虹） ---------------- */
 body[data-env="sunset"] { background: radial-gradient(120% 90% at 50% 26%, #4b2a35 0%, #201318 52%, #070405 100%); }
