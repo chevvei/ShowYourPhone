@@ -15,6 +15,7 @@ import { turret, tScene, tCam, openTurret, closeTurretUI, startTurretRun, tickTu
 import { shoot, sScene, sCam, openShoot, closeShootUI, startShootRun, tickShoot } from './shoot.js';
 import { wave, wScene, wCam, openWave, closeWaveUI, startWaveRun, tickWave } from './wave.js';
 import { maze, zScene, zCam, openMaze, closeMazeUI, startMazeRun, tickMaze } from './maze.js';
+import { world, wdScene, wdCam, openWorld, closeWorld, worldResume, tickWorld } from './world.js';
 
 const $ = (s) => document.querySelector(s);
 const PI = Math.PI;
@@ -614,17 +615,22 @@ function bindUI() {
   $('#infoClose').onclick = () => selectPart(null);
   // 部件小游戏：信息卡入口 + 各游戏 HUD 按钮 + 徽章事件（游戏模块 → award，单向解耦）
   $('#infoMicro').onclick = () => { if (selGame) enterGameWorld(selGame); };
-  for (const [pre, key] of [['g', 'micro'], ['t', 'turret'], ['s', 'shoot'], ['w', 'wave'], ['z', 'maze']]) {
+  for (const [key, pre] of Object.entries(GAME_PRE)) {
     $('#' + pre + 'Quit').onclick = () => exitGameWorld();
     $('#' + pre + 'Exit').onclick = () => exitGameWorld();
     $('#' + pre + 'Retry').onclick = () => GAMES[key].start();
   }
   addEventListener('micro-award', (e) => award(e.detail));
   addEventListener('game-award', (e) => award(e.detail));
+  // 异世界三事件（world.js 单向解耦）：进关卡 / 离开 / 解锁徽章
+  addEventListener('world-enter', (e) => enterGameWorld(e.detail, true));
+  addEventListener('world-quit', () => exitWorld());
+  addEventListener('world-award', (e) => award(e.detail));
   document.querySelectorAll('#devTabs button').forEach((b) => (b.onclick = () => switchDevice(b.dataset.dev)));
   addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (curGame) exitGameWorld();
+      else if (world.on) exitWorld();
       else if (S.keynote) stopKeynote();
       else if (zen.on) toggleZen(false);
       else if ($('#custom').classList.contains('on')) $('#custom').classList.remove('on');
@@ -638,6 +644,9 @@ function bindUI() {
       else selectPart(null);
     }
     if (S.keynote) return;
+    // 异世界内只保留 V（进出）——其余快捷键挂起，避免面板/主场景动作穿透到第一人称层
+    if (world.on) { if (e.key === 'v' || e.key === 'V') toggleWorld(); return; }
+    if (e.key === 'v' || e.key === 'V') toggleWorld();              // 异世界
     if (e.key === 'e' || e.key === 'E') $('#btnExplode').click();
     if ((e.key === 'f' || e.key === 'F') && DEV().hasFold) (S.fold > 1 ? $('#btnOpen') : $('#btnClose')).click();
     if (e.key === 'k' || e.key === 'K') startKeynote();
@@ -2011,42 +2020,56 @@ function toggleZen(force) {
 // 渲染复用：同一 composer，仅切 RenderPass 的 scene/camera；bloom 调强（游戏全是发光体）
 let microBusy = false;                                // 进出序列互斥锁（含飞行/白闪期间）
 let curGame = null;                                   // 当前游戏 key（micro/turret/shoot/wave/maze），主循环据此分流
+let fromWorld = false;                                // 本局游戏是否从异世界传送门进入（退出时决定回哪）
+const GAME_PRE = { micro: 'g', turret: 't', shoot: 's', wave: 'w', maze: 'z' };   // 游戏 HUD 前缀（DOM id 约定）
 function gameOfPart(id) { return Object.keys(GAMES).find((k) => GAMES[k].parts.includes(id)); }
-async function enterGameWorld(key) {
+async function enterGameWorld(key, viaWorld = false) {
   const G = GAMES[key];
   if (!G || curGame || microBusy) return;
   microBusy = true;
+  fromWorld = viaWorld;
   try {
-    if (zen.on) toggleZen(false);
-    selectPart(null);
-    toggleBadges(false); toggleDaily(false); toggleQuiz(false);
     sfx('whoosh'); buzz(10);
     cancelTweens();
-    // 1) 收拢整机：合上折叠、收回爆炸，让主板归位
-    if (S.fold > 0.01) await animFold(0, 1.0);
-    if (S.explode > 0.01) await animExplode(0, 0.9);
-    model.update(0); stage.updateMatrixWorld(true);
-    // 2) 找到部件锚点，飞过去（部件 id 随设备不同：Duo 电池叫 batA、18 系叫 battery，取当前设备存在的那个）
-    const pid = G.parts.find((id) => model.parts.some((p) => p.id === id));
-    const bp = model.parts.find((q) => q.id === pid);
-    const c = bp.anchorObj.localToWorld(bp.anchor.clone());
-    const dir = camera.position.clone().sub(controls.target).normalize();
-    await flyTo(c.clone().addScaledVector(dir, 130).toArray(), c.toArray(), 1.7);
-    // 3) 持续推进——穿过芯片表面（推进到 55% 时白闪接管衔接）
-    const p0 = camera.position.clone(), t0 = controls.target.clone();
-    let flashed = false;
-    await tween(1.5, (k) => {
-      camera.position.lerpVectors(p0, c, k);
-      controls.target.lerpVectors(t0, c, Math.min(k * 1.6, 1));
-      if (!flashed && k > 0.55) { flashed = true; $('#flash').classList.add('on'); }
-    }, ease.in);
+    if (viaWorld) {
+      // 异世界传送门：主场景已不可见，无需飞入序列，白闪直切。
+      // 必须先关 world（world.on=false + 撤 HUD），否则主循环 world 分支残留、游戏 tick 永远不跑
+      $('#flash').classList.add('on');
+      await sleepMs(340);
+      closeWorld();
+    } else {
+      if (zen.on) toggleZen(false);
+      selectPart(null);
+      toggleBadges(false); toggleDaily(false); toggleQuiz(false);
+      // 1) 收拢整机：合上折叠、收回爆炸，让主板归位
+      if (S.fold > 0.01) await animFold(0, 1.0);
+      if (S.explode > 0.01) await animExplode(0, 0.9);
+      model.update(0); stage.updateMatrixWorld(true);
+      // 2) 找到部件锚点，飞过去（部件 id 随设备不同：Duo 电池叫 batA、18 系叫 battery，取当前设备存在的那个）
+      const pid = G.parts.find((id) => model.parts.some((p) => p.id === id));
+      const bp = model.parts.find((q) => q.id === pid);
+      const c = bp.anchorObj.localToWorld(bp.anchor.clone());
+      const dir = camera.position.clone().sub(controls.target).normalize();
+      await flyTo(c.clone().addScaledVector(dir, 130).toArray(), c.toArray(), 1.7);
+      // 3) 持续推进——穿过芯片表面（推进到 55% 时白闪接管衔接）
+      const p0 = camera.position.clone(), t0 = controls.target.clone();
+      let flashed = false;
+      await tween(1.5, (k) => {
+        camera.position.lerpVectors(p0, c, k);
+        controls.target.lerpVectors(t0, c, Math.min(k * 1.6, 1));
+        if (!flashed && k > 0.55) { flashed = true; $('#flash').classList.add('on'); }
+      }, ease.in);
+    }
     // 4) 白屏峰值处切换世界（G.open 内部才 build 出场景/相机，之后再接管 RenderPass——
     //    live binding 更新变量，但已赋给 renderPass 的 null 不会跟着变，顺序反了会每帧崩）
     G.open();                                     // HUD + 开场字幕 + 倒计时 + 徽章
     renderPass.scene = G.scene(); renderPass.camera = G.cam();
     bloom.strength = 0.85; bloom.threshold = 0.5;
     curGame = key;
-    await sleepMs(140);
+    if (viaWorld) {   // 结算面板返回按钮：从异世界来就回异世界
+      $('#' + GAME_PRE[key] + 'Exit').textContent = '◈ 返回异世界';
+    }
+    await sleepMs(viaWorld ? 120 : 140);
     $('#flash').classList.remove('on');
   } finally { microBusy = false; }
 }
@@ -2059,28 +2082,74 @@ window.__enterGame = async (k) => {
 window.__gstate = () => ({ busy: microBusy, cur: curGame, tapT: partTapT, sel: S.selected });   // 测试探针：进出序列/双击计时内部态
 // 退出：白闪 → 回主场景 → 相机从部件前“退出来”，再拉回默认视角
 async function exitGameWorld() {
-  const G = curGame && GAMES[curGame];
+  const gk = curGame, G = curGame && GAMES[curGame];
   if (!G || microBusy) return;
   microBusy = true;
+  const viaWorld = fromWorld; fromWorld = false;
+  const playedOk = viaWorld && G.st.over === true;   // 必须在 G.close() 重置 over 前读取：本局以结算面板收尾才回收碎片
   try {
     sfx('whoosh');
     $('#flash').classList.add('on');
     await sleepMs(340);
     G.close();
     curGame = null;
-    renderPass.scene = scene; renderPass.camera = camera;
-    bloom.strength = 0.18; bloom.threshold = 0.9;
-    // 相机落在部件前方，然后拉回全局视角（像从部件里退了出来）
-    model.update(0); stage.updateMatrixWorld(true);
-    const pid = G.parts.find((id) => model.parts.some((p) => p.id === id));
-    const bp = model.parts.find((q) => q.id === pid);
-    const c = bp.anchorObj.localToWorld(bp.anchor.clone());
-    camera.position.copy(c).add(new THREE.Vector3(60, 40, 120));
-    controls.target.copy(c);
-    controls.update();
+    $('#' + GAME_PRE[gk] + 'Exit').textContent = '⌂ 返回工坊';   // 还原结算面板按钮文案
+    if (viaWorld) {
+      // 回异世界：原地复活 + 碎片结算（worldResume 同步执行完才切 renderPass，
+      // 两个赋值之间无 await，主循环不会插帧渲染到“游戏场景已关、异世界未接”的中间态）
+      worldResume(playedOk);
+      renderPass.scene = wdScene; renderPass.camera = wdCam;
+      bloom.strength = 0.85; bloom.threshold = 0.5;
+    } else {
+      renderPass.scene = scene; renderPass.camera = camera;
+      bloom.strength = 0.18; bloom.threshold = 0.9;
+      // 相机落在部件前方，然后拉回全局视角（像从部件里退了出来）
+      model.update(0); stage.updateMatrixWorld(true);
+      const pid = G.parts.find((id) => model.parts.some((p) => p.id === id));
+      const bp = model.parts.find((q) => q.id === pid);
+      const c = bp.anchorObj.localToWorld(bp.anchor.clone());
+      camera.position.copy(c).add(new THREE.Vector3(60, 40, 120));
+      controls.target.copy(c);
+      controls.update();
+    }
     await sleepMs(120);
     $('#flash').classList.remove('on');
-    flyTo([-260, 120, 300], [0, 0, 0], 1.8);
+    if (!viaWorld) flyTo([-260, 120, 300], [0, 0, 0], 1.8);
+  } finally { microBusy = false; }
+}
+
+// ---------------- 异世界进出（V 键 / 控制坞 ◈ 按钮 / vQuit）----------------
+// 与游戏进出同构：白闪过渡 + renderPass 接管 wdScene/wdCam + bloom 拉满（霓虹夜景）
+async function toggleWorld(force) {
+  const want = force !== undefined ? force : !world.on;
+  if (want === world.on || microBusy || curGame) return;
+  if (!want) return exitWorld();
+  microBusy = true;
+  try {
+    sfx('whoosh'); buzz(10);
+    cancelTweens();
+    selectPart(null);
+    $('#flash').classList.add('on');
+    await sleepMs(340);
+    openWorld(false);
+    renderPass.scene = wdScene; renderPass.camera = wdCam;
+    bloom.strength = 0.85; bloom.threshold = 0.5;
+    await sleepMs(120);
+    $('#flash').classList.remove('on');
+  } finally { microBusy = false; }
+}
+async function exitWorld() {
+  if (!world.on || microBusy) return;
+  microBusy = true;
+  try {
+    sfx('whoosh');
+    $('#flash').classList.add('on');
+    await sleepMs(340);
+    closeWorld();
+    renderPass.scene = scene; renderPass.camera = camera;
+    bloom.strength = 0.18; bloom.threshold = 0.9;
+    await sleepMs(120);
+    $('#flash').classList.remove('on');
   } finally { microBusy = false; }
 }
 // 兼容别名（既有调用沿用旧名）；GAMES 注册表定义在使用前（函数声明可后置，const 表不行）
@@ -2152,6 +2221,8 @@ const BADGES = [
   { id: 'beat',   ic: '🎵', nm: '金牌混音师', ds: '声波冲浪单局拿下 1500 分' },
   { id: 'magnet', ic: '🧲', nm: '磁场行者',   ds: '进入 MagSafe 磁力迷阵' },
   { id: 'roll',   ic: '⚪', nm: '滚珠大师',   ds: '磁力迷阵三关全通' },
+  { id: 'world1', ic: '◈', nm: '异世界旅人', ds: '接入 A20 内部的赛博都市' },
+  { id: 'world5', ic: '❖', nm: '重启之心',   ds: '异世界集齐 5 枚核心碎片，重启 A20' },
 ];
 let badgeStore = {};
 try { badgeStore = JSON.parse(localStorage.getItem('iphoneDuo.badges') || '{}'); } catch { /* 损坏则重建 */ }
@@ -2464,6 +2535,7 @@ function bindFun() {
   $('#btnTint').onclick = () => toggleTint();
   $('#btnPower').onclick = powerOn;
   $('#btnCard').onclick = exportCard;
+  $('#btnWorld').onclick = () => toggleWorld();
   $('#cutDepth').oninput = (e) => setCutDepth(e.target.value / 100);
   $('#dailyClose').onclick = () => toggleDaily(false);
   $('#badgesClose').onclick = () => toggleBadges(false);
@@ -2497,6 +2569,12 @@ window.__fun = () => ({
     maze: { on: maze.on, run: maze.run, over: maze.over, lv: maze.lv, score: maze.score, time: Math.ceil(maze.time),
       hudOn: document.querySelector('#zgame')?.classList.contains('on') },
   },
+  world: {                                            // e2e：异世界（第一人称元器件都市）状态快照
+    on: world.on, cur: curGame, viaWorld: fromWorld,
+    frags: world.frags.length, fragIds: [...world.frags], finale: world.finale, near: world.near,
+    layerOn: document.querySelector('#vgame')?.classList.contains('on'),
+    rpassWd: renderPass.scene === wdScene && renderPass.camera === wdCam,   // 渲染管线是否已接管异世界
+  },
   fifth: {
     dev: CUR,
     badgeN: Object.keys(badgeStore).filter((k) => BADGES.some((b) => b.id === k)).length,
@@ -2525,6 +2603,13 @@ let fpsAcc = 0, fpsN = 0;
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
   runTweens(dt);
+  // 异世界：第一人称独立分支（行走 tick + 直接出图，controls/模型/物理全部挂起）
+  if (world.on) {
+    tickWorld(dt);
+    composer.render();
+    requestAnimationFrame(frame);
+    return;
+  }
   // 微观世界：独立分支——游戏 tick + 直接出图（controls/模型/物理全部挂起）
   if (micro.on) {
     tickMicro(dt);

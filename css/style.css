@@ -504,7 +504,44 @@ body.mobile #game.on:not(.over) #gTouch { display: flex; }
   font-size: 12px; font-weight: 700; letter-spacing: .18em; color: #c8a0ff; background: rgba(40, 16, 70, 0.55);
   border: 1px solid rgba(160, 100, 255, 0.45); opacity: 0; transition: opacity .25s, box-shadow .25s; }
 #wPeak.on { opacity: 1; box-shadow: 0 0 22px rgba(150, 90, 255, 0.55); }
-#wgame .gHud #wVol { font-size: 15px; letter-spacing: .1em; }
+/* ---- 异世界（第一人称元器件都市，v 前缀避开 wave 游戏的 w* id）---- */
+#vgame { touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none; }
+body.world #top, body.world #dock, body.world #parts, body.world #info, body.world #hint { opacity: 0; pointer-events: none; }
+body.world #sbEdge, body.world #dockEdge, body.world #sbGuide, body.world #touchHint { display: none !important; }
+#vObjective { position: absolute; top: 18px; left: 18px; display: flex; flex-direction: column; gap: 4px; max-width: 62vw;
+  padding: 12px 18px; border-radius: 14px; background: rgba(8, 12, 24, 0.55); border: 1px solid rgba(120, 200, 255, 0.2);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+#vObjective b { font-size: 15px; letter-spacing: .1em; color: #ffd76a; text-shadow: 0 0 14px rgba(255, 200, 80, .5); }
+#vObjective span { font-size: 12px; color: rgba(180, 215, 240, .85); letter-spacing: .05em; }
+#vObjective #vDist { color: #7fe0ff; font-variant-numeric: tabular-nums; }
+#vCross { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%;
+  background: rgba(160, 230, 255, .85); box-shadow: 0 0 10px rgba(90, 200, 255, .9); pointer-events: none; }
+#vPrompt { position: absolute; left: 50%; bottom: 24vh; transform: translateX(-50%) translateY(10px); text-align: center;
+  padding: 12px 26px; border-radius: 16px; background: rgba(10, 16, 30, 0.72); border: 1px solid rgba(255, 215, 106, 0.4);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); opacity: 0; pointer-events: none; transition: opacity .3s, transform .3s; }
+#vPrompt.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+#vPrompt b { display: block; font-size: 18px; letter-spacing: .12em; color: #ffe9b8; text-shadow: 0 0 18px rgba(255, 210, 110, .6); }
+#vPrompt span { display: block; margin-top: 6px; font-size: 11px; letter-spacing: .18em; color: rgba(190, 215, 240, .7); }
+#vMsg { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;
+  font-size: 21px; font-weight: 600; letter-spacing: .08em; color: #dff2ff; text-shadow: 0 0 26px rgba(90, 190, 255, .85);
+  opacity: 0; transition: opacity .5s; white-space: pre-line; max-width: 86vw; }
+#vMsg.on { opacity: 1; }
+#vTitle { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; pointer-events: none; opacity: 0; transition: opacity .6s;
+  background: radial-gradient(ellipse at center, rgba(4, 8, 18, .35), rgba(4, 8, 18, 0) 65%); }
+#vTitle.on { opacity: 1; }
+#vTitle h2 { font-size: clamp(30px, 6vw, 54px); font-weight: 800; letter-spacing: .3em; text-indent: .3em; color: #eaf6ff;
+  text-shadow: 0 0 40px rgba(90, 190, 255, .9), 0 0 90px rgba(255, 110, 220, .45); }
+#vTitle p { font-size: clamp(13px, 2vw, 17px); letter-spacing: .2em; color: rgba(185, 215, 240, .85); }
+#vJoy { position: absolute; left: 26px; bottom: calc(env(safe-area-inset-bottom) + 30px); width: 112px; height: 112px; border-radius: 50%;
+  background: rgba(10, 16, 30, 0.4); border: 1px solid rgba(120, 200, 255, 0.28); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: none; touch-action: none; }
+#vJoy i { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px; border-radius: 50%;
+  background: rgba(90, 170, 255, 0.5); box-shadow: 0 0 18px rgba(80, 160, 255, .6); transition: transform .08s; }
+body.mobile #vgame.on #vJoy { display: block; }
+#vLookTip { position: absolute; right: 22px; bottom: calc(env(safe-area-inset-bottom) + 34px); font-size: 11px; letter-spacing: .14em;
+  color: rgba(170, 205, 235, .6); pointer-events: none; }
+body:not(.mobile) #vLookTip { display: none; }
 #flash { position: fixed; inset: 0; z-index: 60; background: #eaf6ff; opacity: 0; pointer-events: none; transition: opacity .55s; }
 #flash.on { opacity: 1; transition: opacity .3s; }
 

@@ -115,6 +115,8 @@ def build():
     sht = strip_exports(strip_imports((ROOT / "js" / "shoot.js").read_text()))
     wav = strip_exports(strip_imports((ROOT / "js" / "wave.js").read_text()))
     maz = strip_exports(strip_imports((ROOT / "js" / "maze.js").read_text()))
+    # 异世界：第一人称元器件都市剧情模式（依赖 three + sfx）
+    wld = strip_exports(strip_imports((ROOT / "js" / "world.js").read_text()))
     mod = strip_exports(strip_imports((ROOT / "js" / "model.js").read_text()))
     # main 里的 postprocessing 导入保留（走 importmap data URL），其余（three / 本地模块）删除
     main = strip_imports(
@@ -127,7 +129,7 @@ def build():
         "import * as THREE from 'three';\n"
         "import { OrbitControls } from 'three/addons/controls/OrbitControls.js';\n\n"
         + tex + "\n" + tx_obj + "\n" + geo + "\n" + eggs + "\n" + sfx + "\n" + mic
-        + "\n" + tur + "\n" + sht + "\n" + wav + "\n" + maz + "\n" + mod + "\n" + main
+        + "\n" + tur + "\n" + sht + "\n" + wav + "\n" + maz + "\n" + wld + "\n" + mod + "\n" + main
     )
 
     importmap = {
