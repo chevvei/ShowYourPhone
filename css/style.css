@@ -446,36 +446,51 @@ body:not(.zen) #zenTip { display: none; }
 #infoMicro { margin-top: 12px; padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 500;
   background: linear-gradient(135deg, #2b6fff, #00d4ff); color: #fff; letter-spacing: .02em; transition: filter .2s; }
 #infoMicro:hover { filter: brightness(1.15); }
-#game { position: fixed; inset: 0; z-index: 40; display: none; }
-#game.on { display: block; }
-#gHud { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 26px;
+#game, .gameLayer { position: fixed; inset: 0; z-index: 40; display: none; }
+#game.on, .gameLayer.on { display: block; }
+#gHud, .gHud { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 26px;
   padding: 10px 26px; border-radius: 16px; background: rgba(8, 12, 24, 0.5); border: 1px solid rgba(120, 200, 255, 0.18);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: opacity .5s; }
-#gHud .gCol { display: flex; flex-direction: column; align-items: center; min-width: 52px; }
-#gHud b { font-size: 19px; font-variant-numeric: tabular-nums; color: #9fe0ff; text-shadow: 0 0 14px rgba(80, 180, 255, .6); }
-#gHud #gScore { color: #ffd76a; text-shadow: 0 0 14px rgba(255, 200, 80, .55); }
-#gHud span { font-size: 10px; color: rgba(160, 200, 230, .55); letter-spacing: .12em; margin-top: 2px; }
-#gMsg { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;
+#gHud .gCol, .gHud .gCol { display: flex; flex-direction: column; align-items: center; min-width: 52px; }
+#gHud b, .gHud b { font-size: 19px; font-variant-numeric: tabular-nums; color: #9fe0ff; text-shadow: 0 0 14px rgba(80, 180, 255, .6); }
+#gHud #gScore, .gHud b.gold { color: #ffd76a; text-shadow: 0 0 14px rgba(255, 200, 80, .55); }
+#gHud span, .gHud span { font-size: 10px; color: rgba(160, 200, 230, .55); letter-spacing: .12em; margin-top: 2px; }
+#gMsg, .gMsg { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;
   font-size: 30px; font-weight: 700; letter-spacing: .14em; color: #dff2ff; text-shadow: 0 0 30px rgba(90, 190, 255, .8); opacity: 0; transition: opacity .4s; white-space: pre-line; }
-#gMsg.on { opacity: 1; }
-#gMsg small { display: block; font-size: 13px; font-weight: 400; letter-spacing: .22em; color: rgba(170, 210, 240, .75); margin-top: 12px; }
-#gQuit { position: absolute; top: 18px; right: 18px; width: 38px; height: 38px; border-radius: 12px; font-size: 15px;
+#gMsg.on, .gMsg.on { opacity: 1; }
+#gMsg small, .gMsg small { display: block; font-size: 13px; font-weight: 400; letter-spacing: .22em; color: rgba(170, 210, 240, .75); margin-top: 12px; }
+#gQuit, .gQuit { position: absolute; top: 18px; right: 18px; width: 38px; height: 38px; border-radius: 12px; font-size: 15px;
   background: rgba(8, 12, 24, 0.5); border: 1px solid rgba(120, 200, 255, 0.2); color: #bfe0f5; backdrop-filter: blur(12px); transition: background .2s; }
-#gQuit:hover { background: rgba(80, 140, 200, 0.35); }
-#gOver { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.92); width: min(400px, 86vw); text-align: center;
+#gQuit:hover, .gQuit:hover { background: rgba(80, 140, 200, 0.35); }
+#gOver, .gOver { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.92); width: min(400px, 86vw); text-align: center;
   padding: 34px 30px 26px; border-radius: 22px; background: rgba(10, 14, 26, 0.78); border: 1px solid rgba(120, 200, 255, 0.22);
   backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); opacity: 0; pointer-events: none; transition: opacity .5s, transform .5s; }
-#gOver.on { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
-#gOver h2 { font-size: 24px; letter-spacing: .18em; color: #ff9f9f; text-shadow: 0 0 24px rgba(255, 110, 110, .5); }
-#gStats { margin: 18px 0 22px; font-size: 14px; line-height: 2; color: #cfe6f5; font-variant-numeric: tabular-nums; }
-#gStats b { color: #ffd76a; }
-#gOver button { margin: 0 6px; padding: 11px 22px; border-radius: 12px; font-size: 14px; font-weight: 500; letter-spacing: .04em; transition: filter .2s, background .2s; }
-#gRetry { background: linear-gradient(135deg, #2b6fff, #00d4ff); color: #fff; }
-#gExit { background: rgba(255, 255, 255, 0.09); border: 1px solid var(--line); color: #cfe0ee; }
-#gOver button:hover { filter: brightness(1.15); }
+#gOver.on, .gOver.on { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+#gOver h2, .gOver h2 { font-size: 24px; letter-spacing: .18em; color: #ff9f9f; text-shadow: 0 0 24px rgba(255, 110, 110, .5); }
+#gStats, .gStats { margin: 18px 0 22px; font-size: 14px; line-height: 2; color: #cfe6f5; font-variant-numeric: tabular-nums; }
+#gStats b, .gStats b { color: #ffd76a; }
+#gOver button, .gOver button { margin: 0 6px; padding: 11px 22px; border-radius: 12px; font-size: 14px; font-weight: 500; letter-spacing: .04em; transition: filter .2s, background .2s; }
+#gRetry, .gRetry { background: linear-gradient(135deg, #2b6fff, #00d4ff); color: #fff; }
+#gExit, .gExit { background: rgba(255, 255, 255, 0.09); border: 1px solid var(--line); color: #cfe0ee; }
+#gOver button:hover, .gOver button:hover { filter: brightness(1.15); }
 #gTouch { position: absolute; inset: auto 0 0 0; height: 34%; display: none; justify-content: space-between; align-items: flex-end; padding: 0 4vw 5vh; pointer-events: none; }
 #gTouch span { font-size: 40px; color: rgba(160, 210, 240, 0.4); text-shadow: 0 0 20px rgba(80, 170, 255, .4); }
 body.mobile #game.on:not(.over) #gTouch { display: flex; }
+/* ---- 各小游戏专属元素 ---- */
+#tgame .gHud #tHp { color: #7dffb0; text-shadow: 0 0 14px rgba(70, 255, 150, .55); }            /* 塔防：电芯血条 */
+#sBarWrap { position: absolute; top: 78px; left: 50%; transform: translateX(-50%); width: min(420px, 72vw); height: 5px;
+  border-radius: 4px; background: rgba(120, 200, 255, 0.14); overflow: hidden; }
+#sBar { display: block; height: 100%; width: 0; border-radius: 4px; background: linear-gradient(90deg, #ffb340, #ff7a2b); box-shadow: 0 0 12px rgba(255, 150, 60, .7); transition: width .3s; }
+#sCross { position: fixed; left: 0; top: 0; z-index: 45; width: 0; height: 0; pointer-events: none; display: none; }
+#sgame.on ~ #sCross { display: block; }
+#sCross i { position: absolute; background: rgba(140, 255, 190, 0.9); box-shadow: 0 0 8px rgba(90, 255, 160, 0.8); }
+#sCross i:first-child { left: -14px; top: -1px; width: 28px; height: 2px; }
+#sCross i:last-child { left: -1px; top: -14px; width: 2px; height: 28px; }
+#wPeak { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); padding: 5px 16px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; letter-spacing: .18em; color: #c8a0ff; background: rgba(40, 16, 70, 0.55);
+  border: 1px solid rgba(160, 100, 255, 0.45); opacity: 0; transition: opacity .25s, box-shadow .25s; }
+#wPeak.on { opacity: 1; box-shadow: 0 0 22px rgba(150, 90, 255, 0.55); }
+#wgame .gHud #wVol { font-size: 15px; letter-spacing: .1em; }
 #flash { position: fixed; inset: 0; z-index: 60; background: #eaf6ff; opacity: 0; pointer-events: none; transition: opacity .55s; }
 #flash.on { opacity: 1; transition: opacity .3s; }
 

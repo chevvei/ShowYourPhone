@@ -245,6 +245,83 @@
     </div>
     <div id="gTouch"><span>◁</span><span>▷</span></div>
   </section>
+
+  <!-- 电池内部 · 离子塔防：铜箔轨道 + 电容塔拦截电涌 -->
+  <section id="tgame" class="gameLayer">
+    <div class="gHud">
+      <div class="gCol"><b id="tGold" class="gold">90</b><span>金币</span></div>
+      <div class="gCol"><b id="tWave">1/6</b><span>波次</span></div>
+      <div class="gCol"><b id="tHp">▮▮▮▮▮▮▮▮▮▮</b><span>电芯</span></div>
+      <div class="gCol"><b id="tScore" class="gold">0</b><span>分数</span></div>
+    </div>
+    <div id="tMsg" class="gMsg"></div>
+    <button id="tQuit" class="gQuit" title="退出塔防 (Esc)">✕</button>
+    <div id="tOver" class="gOver">
+      <h2 id="tOverTitle">电芯过载</h2>
+      <div id="tStats" class="gStats"></div>
+      <button id="tRetry" class="gRetry">↻ 再来一局</button>
+      <button id="tExit" class="gExit">⌂ 返回工坊</button>
+    </div>
+  </section>
+
+  <!-- Face ID 点阵空间 · 点阵射击：限时点亮目标完成扫描 -->
+  <section id="sgame" class="gameLayer">
+    <div class="gHud">
+      <div class="gCol"><b id="sProgress">0/25</b><span>扫描</span></div>
+      <div class="gCol"><b id="sCombo">×0</b><span>连击</span></div>
+      <div class="gCol"><b id="sTime" class="gold">60</b><span>剩余</span></div>
+      <div class="gCol"><b id="sScore" class="gold">0</b><span>分数</span></div>
+    </div>
+    <div id="sBarWrap"><i id="sBar"></i></div>
+    <div id="sMsg" class="gMsg"></div>
+    <button id="sQuit" class="gQuit" title="退出射击 (Esc)">✕</button>
+    <div id="sOver" class="gOver">
+      <h2 id="sOverTitle">扫描超时</h2>
+      <div id="sStats" class="gStats"></div>
+      <button id="sRetry" class="gRetry">↻ 再来一局</button>
+      <button id="sExit" class="gExit">⌂ 返回工坊</button>
+    </div>
+  </section>
+
+  <!-- 扬声管内部 · 声波冲浪：正弦波地形 + 跳跃收集音符 -->
+  <section id="wgame" class="gameLayer">
+    <div class="gHud">
+      <div class="gCol"><b id="wScore" class="gold">0</b><span>分数</span></div>
+      <div class="gCol"><b id="wCombo">×1</b><span>连击</span></div>
+      <div class="gCol"><b id="wVol">🔊🔊🔊</b><span>音量</span></div>
+      <div class="gCol"><b id="wSpeed">0</b><span>速率</span></div>
+    </div>
+    <div id="wPeak">▲ 浪尖 ×2</div>
+    <div id="wMsg" class="gMsg"></div>
+    <button id="wQuit" class="gQuit" title="退出冲浪 (Esc)">✕</button>
+    <div id="wOver" class="gOver">
+      <h2>哑场结算</h2>
+      <div id="wStats" class="gStats"></div>
+      <button id="wRetry" class="gRetry">↻ 再来一局</button>
+      <button id="wExit" class="gExit">⌂ 返回工坊</button>
+    </div>
+  </section>
+
+  <!-- MagSafe 磁环 · 磁力迷阵：倾斜迷宫引导磁珠，3 关递进 -->
+  <section id="zgame" class="gameLayer">
+    <div class="gHud">
+      <div class="gCol"><b id="zLv">1/3</b><span>关卡</span></div>
+      <div class="gCol"><b id="zTime" class="gold">45</b><span>倒计时</span></div>
+      <div class="gCol"><b id="zScore" class="gold">0</b><span>分数</span></div>
+    </div>
+    <div id="zMsg" class="gMsg"></div>
+    <button id="zQuit" class="gQuit" title="退出迷阵 (Esc)">✕</button>
+    <div id="zOver" class="gOver">
+      <h2 id="zOverTitle">磁力迷阵</h2>
+      <div id="zStats" class="gStats"></div>
+      <button id="zRetry" class="gRetry">↻ 再来一局</button>
+      <button id="zExit" class="gExit">⌂ 返回工坊</button>
+    </div>
+  </section>
+
+  <!-- 点阵射击准星（跟随指针的 CSS 十字） -->
+  <div id="sCross"><i></i><i></i></div>
+
   <!-- 微观世界进出场的白闪过渡层 -->
   <div id="flash"></div>
 

@@ -11,6 +11,10 @@ import { P18, P18_STD, P18_MAX } from './geo.js';
 import { EGG_DEFS, eggsForDev, loadEggs, saveEggs, decodeEggImage, eggOpts } from './eggs.js';
 import { sfx, buzz, toggleSfx, sfxMuted } from './sfx.js';
 import { micro, mScene, mCam, openMicro, closeMicroUI, startMicroRun, tickMicro } from './micro.js';
+import { turret, tScene, tCam, openTurret, closeTurretUI, startTurretRun, tickTurret } from './turret.js';
+import { shoot, sScene, sCam, openShoot, closeShootUI, startShootRun, tickShoot } from './shoot.js';
+import { wave, wScene, wCam, openWave, closeWaveUI, startWaveRun, tickWave } from './wave.js';
+import { maze, zScene, zCam, openMaze, closeMazeUI, startMazeRun, tickMaze } from './maze.js';
 
 const $ = (s) => document.querySelector(s);
 const PI = Math.PI;
@@ -349,14 +353,17 @@ canvas.addEventListener('pointerup', (e) => {
     }
   }
   selectPart(hovered ? hovered.id : null, false);
-  // 彩蛋入口：双击主板 → 电影化运镜钻进 A20 芯片，进入微观世界（电流竞速）
-  if (hovered && hovered.id === 'board') {
-    const now = performance.now();
-    if (now - boardTapT < 380) { boardTapT = 0; enterMicro(); }
-    else boardTapT = now;
+  // 彩蛋入口：双击游戏部件（主板/电池/前摄/扬声器/MagSafe）→ 电影化运镜钻进内部小游戏
+  if (hovered) {
+    const g = gameOfPart(hovered.id);
+    if (g) {
+      const now = performance.now();
+      if (now - partTapT < 380) { partTapT = 0; enterGameWorld(g); }
+      else partTapT = now;
+    }
   }
 });
-let boardTapT = 0;
+let partTapT = 0;
 // 爆炸态双击部件 = 弹飞：给它一个随机冲量，转几圈后自己飞回原位
 canvas.addEventListener('dblclick', (e) => {
   if (S.keynote || S.explode < 0.5 || phys.on) return;
@@ -487,6 +494,7 @@ window.__screenRect = (partId) => {
   return { x: (x0 * 0.5 + 0.5) * innerWidth, y: (-y1 * 0.5 + 0.5) * innerHeight, w: ((x1 - x0) * 0.5) * innerWidth, h: ((y1 - y0) * 0.5) * innerHeight };
 };
 
+let selGame = null;   // 当前信息卡部件对应的小游戏 key（入口按钮用）
 function selectPart(id, fly) {
   S.selected = id;
   if (id) { sfx('tick'); buzz(8); }
@@ -502,7 +510,10 @@ function selectPart(id, fly) {
   $('#infoName').textContent = p.name;
   $('#infoEn').textContent = p.en;
   $('#infoSpec').textContent = p.spec;
-  $('#infoMicro').hidden = id !== 'board';   // 主板专属入口：深入芯片内部
+  const entryGame = gameOfPart(id);                  // 部件专属入口：钻进内部小游戏
+  selGame = entryGame;
+  $('#infoMicro').hidden = !entryGame;
+  if (entryGame) $('#infoMicro').textContent = `⤢ ${GAMES[entryGame].nm}`;
   panel.classList.add('on');
   if (fly) {
     const go = async () => {
@@ -550,16 +561,19 @@ function bindUI() {
   $('#btnKeynote').onclick = () => startKeynote();
   $('#kExit').onclick = () => stopKeynote();
   $('#infoClose').onclick = () => selectPart(null);
-  // 芯片微观世界：主板信息卡入口 + 游戏内按钮 + 徽章事件（micro.js → award，单向解耦）
-  $('#infoMicro').onclick = () => enterMicro();
-  $('#gQuit').onclick = () => exitMicro();
-  $('#gExit').onclick = () => exitMicro();
-  $('#gRetry').onclick = () => startMicroRun();
+  // 部件小游戏：信息卡入口 + 各游戏 HUD 按钮 + 徽章事件（游戏模块 → award，单向解耦）
+  $('#infoMicro').onclick = () => { if (selGame) enterGameWorld(selGame); };
+  for (const [pre, key] of [['g', 'micro'], ['t', 'turret'], ['s', 'shoot'], ['w', 'wave'], ['z', 'maze']]) {
+    $('#' + pre + 'Quit').onclick = () => exitGameWorld();
+    $('#' + pre + 'Exit').onclick = () => exitGameWorld();
+    $('#' + pre + 'Retry').onclick = () => GAMES[key].start();
+  }
   addEventListener('micro-award', (e) => award(e.detail));
+  addEventListener('game-award', (e) => award(e.detail));
   document.querySelectorAll('#devTabs button').forEach((b) => (b.onclick = () => switchDevice(b.dataset.dev)));
   addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (micro.on) exitMicro();
+      if (curGame) exitGameWorld();
       else if (S.keynote) stopKeynote();
       else if (zen.on) toggleZen(false);
       else if ($('#custom').classList.contains('on')) $('#custom').classList.remove('on');
@@ -1943,9 +1957,12 @@ function toggleZen(force) {
 // ---------------- 芯片微观世界：进出场的电影化序列 ----------------
 // 进入：收面板 → 飞向主板 → 持续推进“穿过”芯片表面（白闪遮衔接）→ 切 Scene 开跑
 // 渲染复用：同一 composer，仅切 RenderPass 的 scene/camera；bloom 调强（游戏全是发光体）
-let microBusy = false;
-async function enterMicro() {
-  if (micro.on || microBusy) return;
+let microBusy = false;                                // 进出序列互斥锁（含飞行/白闪期间）
+let curGame = null;                                   // 当前游戏 key（micro/turret/shoot/wave/maze），主循环据此分流
+function gameOfPart(id) { return Object.keys(GAMES).find((k) => GAMES[k].parts.includes(id)); }
+async function enterGameWorld(key) {
+  const G = GAMES[key];
+  if (!G || curGame || microBusy) return;
   microBusy = true;
   try {
     if (zen.on) toggleZen(false);
@@ -1957,8 +1974,9 @@ async function enterMicro() {
     if (S.fold > 0.01) await animFold(0, 1.0);
     if (S.explode > 0.01) await animExplode(0, 0.9);
     model.update(0); stage.updateMatrixWorld(true);
-    // 2) 找到主板上的芯片锚点，飞过去
-    const bp = model.parts.find((q) => q.id === 'board');
+    // 2) 找到部件锚点，飞过去（部件 id 随设备不同：Duo 电池叫 batA、18 系叫 battery，取当前设备存在的那个）
+    const pid = G.parts.find((id) => model.parts.some((p) => p.id === id));
+    const bp = model.parts.find((q) => q.id === pid);
     const c = bp.anchorObj.localToWorld(bp.anchor.clone());
     const dir = camera.position.clone().sub(controls.target).normalize();
     await flyTo(c.clone().addScaledVector(dir, 130).toArray(), c.toArray(), 1.7);
@@ -1970,30 +1988,40 @@ async function enterMicro() {
       controls.target.lerpVectors(t0, c, Math.min(k * 1.6, 1));
       if (!flashed && k > 0.55) { flashed = true; $('#flash').classList.add('on'); }
     }, ease.in);
-    // 4) 白屏峰值处切换世界（openMicro 内部 buildMicro 创建 mScene/mCam，之后再接管 RenderPass——
+    // 4) 白屏峰值处切换世界（G.open 内部才 build 出场景/相机，之后再接管 RenderPass——
     //    live binding 更新变量，但已赋给 renderPass 的 null 不会跟着变，顺序反了会每帧崩）
-    openMicro();                                  // HUD + 开场字幕 + 倒计时 + 微章
-    renderPass.scene = mScene; renderPass.camera = mCam;
+    G.open();                                     // HUD + 开场字幕 + 倒计时 + 徽章
+    renderPass.scene = G.scene(); renderPass.camera = G.cam();
     bloom.strength = 0.85; bloom.threshold = 0.5;
+    curGame = key;
     await sleepMs(140);
     $('#flash').classList.remove('on');
   } finally { microBusy = false; }
 }
-window.__enterMicro = enterMicro;   // 测试探针：直接触发进入序列，抓真实异常
-// 退出：白闪 → 回主场景 → 相机从芯片前“退出来”，再拉回默认视角
-async function exitMicro() {
-  if (!micro.on || microBusy) return;
+window.__enterMicro = () => enterGameWorld('micro');   // 测试探针：直接触发进入序列，抓真实异常
+// 测试探针：通用进入（arcade.mjs 用）——上一局退场动画未完（busy）时先等空闲，保证 e2e 时序确定
+window.__enterGame = async (k) => {
+  for (let i = 0; i < 100 && (microBusy || curGame); i++) await new Promise((r) => setTimeout(r, 100));
+  return enterGameWorld(k);
+};
+window.__gstate = () => ({ busy: microBusy, cur: curGame, tapT: partTapT, sel: S.selected });   // 测试探针：进出序列/双击计时内部态
+// 退出：白闪 → 回主场景 → 相机从部件前“退出来”，再拉回默认视角
+async function exitGameWorld() {
+  const G = curGame && GAMES[curGame];
+  if (!G || microBusy) return;
   microBusy = true;
   try {
     sfx('whoosh');
     $('#flash').classList.add('on');
     await sleepMs(340);
-    closeMicroUI();
+    G.close();
+    curGame = null;
     renderPass.scene = scene; renderPass.camera = camera;
     bloom.strength = 0.18; bloom.threshold = 0.9;
-    // 相机落在主板前方，然后拉回全局视角（像从芯片里退了出来）
+    // 相机落在部件前方，然后拉回全局视角（像从部件里退了出来）
     model.update(0); stage.updateMatrixWorld(true);
-    const bp = model.parts.find((q) => q.id === 'board');
+    const pid = G.parts.find((id) => model.parts.some((p) => p.id === id));
+    const bp = model.parts.find((q) => q.id === pid);
     const c = bp.anchorObj.localToWorld(bp.anchor.clone());
     camera.position.copy(c).add(new THREE.Vector3(60, 40, 120));
     controls.target.copy(c);
@@ -2003,6 +2031,16 @@ async function exitMicro() {
     flyTo([-260, 120, 300], [0, 0, 0], 1.8);
   } finally { microBusy = false; }
 }
+// 兼容别名（既有调用沿用旧名）；GAMES 注册表定义在使用前（函数声明可后置，const 表不行）
+const GAMES = {
+  micro:  { parts: ['board'],           nm: '深入芯片内部', open: openMicro,  close: closeMicroUI,  start: startMicroRun,  tick: tickMicro,  st: micro,  scene: () => mScene, cam: () => mCam },
+  turret: { parts: ['batA', 'battery'], nm: '深入电池内部', open: openTurret, close: closeTurretUI, start: startTurretRun, tick: tickTurret, st: turret, scene: () => tScene, cam: () => tCam },
+  shoot:  { parts: ['fcam'],            nm: '深入点阵空间', open: openShoot,  close: closeShootUI,  start: startShootRun,  tick: tickShoot,  st: shoot,  scene: () => sScene, cam: () => sCam },
+  wave:   { parts: ['spk'],             nm: '深入扬声管',   open: openWave,   close: closeWaveUI,   start: startWaveRun,   tick: tickWave,   st: wave,   scene: () => wScene, cam: () => wCam },
+  maze:   { parts: ['mag'],             nm: '深入磁环迷宫', open: openMaze,   close: closeMazeUI,   start: startMazeRun,   tick: tickMaze,   st: maze,   scene: () => zScene, cam: () => zCam },
+};
+const enterMicro = () => enterGameWorld('micro');
+const exitMicro = () => exitGameWorld();
 // 沉浸中鼠标/触摸活动 → 唤出操作坞（已显示时低频刷新静止计时）
 addEventListener('pointermove', (e) => {
   if (!zen.on || e.pointerType === 'touch') return;
@@ -2054,6 +2092,14 @@ const BADGES = [
   { id: 'share',  ic: '⇗', nm: '分享家',     ds: '生成一条分享链接' },
   { id: 'micro',  ic: '⚛', nm: '微观访客',   ds: '深入 A20 芯片内部一次' },
   { id: 'racer',  ic: '⚡', nm: '超频骑手',   ds: '电流竞速单局拿下 2000 分' },
+  { id: 'turret', ic: '🔋', nm: '电网工程师', ds: '深入电池布置离子塔防' },
+  { id: 'shield', ic: '🛡', nm: '电芯守卫者', ds: '离子塔防守住全部 6 波电涌' },
+  { id: 'shoot',  ic: '🎯', nm: '点阵射手',   ds: '进入 Face ID 点阵空间' },
+  { id: 'scan',   ic: '✦', nm: '深度扫描',   ds: '点阵射击点亮 25 个目标' },
+  { id: 'waver',  ic: '🌊', nm: '浪尖骑士',   ds: '踏上扬声器声波冲浪板' },
+  { id: 'beat',   ic: '🎵', nm: '金牌混音师', ds: '声波冲浪单局拿下 1500 分' },
+  { id: 'magnet', ic: '🧲', nm: '磁场行者',   ds: '进入 MagSafe 磁力迷阵' },
+  { id: 'roll',   ic: '⚪', nm: '滚珠大师',   ds: '磁力迷阵三关全通' },
 ];
 let badgeStore = {};
 try { badgeStore = JSON.parse(localStorage.getItem('iphoneDuo.badges') || '{}'); } catch { /* 损坏则重建 */ }
@@ -2388,6 +2434,17 @@ window.__fun = () => ({
     gameOn: $('#game').classList.contains('on'),
     overOn: document.querySelector('#gOver').classList.contains('on'),
   },
+  arcade: {                                            // e2e：四款部件小游戏的状态快照
+    cur: curGame,
+    turret: { on: turret.on, run: turret.run, over: turret.over, gold: turret.gold, score: turret.score, coreHp: turret.coreHp, wave: turret.wave, kills: turret.kills,
+      hudOn: document.querySelector('#tgame')?.classList.contains('on') },
+    shoot: { on: shoot.on, run: shoot.run, over: shoot.over, score: shoot.score, hit: shoot.hit, combo: shoot.combo, need: shoot.need,
+      hudOn: document.querySelector('#sgame')?.classList.contains('on') },
+    waver: { on: wave.on, run: wave.run, over: wave.over, score: wave.score, vol: wave.vol, combo: wave.combo,
+      hudOn: document.querySelector('#wgame')?.classList.contains('on') },
+    maze: { on: maze.on, run: maze.run, over: maze.over, lv: maze.lv, score: maze.score, time: Math.ceil(maze.time),
+      hudOn: document.querySelector('#zgame')?.classList.contains('on') },
+  },
   fifth: {
     dev: CUR,
     badgeN: Object.keys(badgeStore).filter((k) => BADGES.some((b) => b.id === k)).length,
@@ -2423,6 +2480,11 @@ function frame() {
     requestAnimationFrame(frame);
     return;
   }
+  // 部件小游戏四件套：同构独立分支（进入时 renderPass 已切到对应游戏场景/相机）
+  if (turret.on) { tickTurret(dt); composer.render(); requestAnimationFrame(frame); return; }
+  if (shoot.on) { tickShoot(dt); composer.render(); requestAnimationFrame(frame); return; }
+  if (wave.on) { tickWave(dt); composer.render(); requestAnimationFrame(frame); return; }
+  if (maze.on) { tickMaze(dt); composer.render(); requestAnimationFrame(frame); return; }
   controls.autoRotate = (S.auto || zen.on) && !S.keynote;   // 沉浸模式 = 展台自转
   controls.update();
 

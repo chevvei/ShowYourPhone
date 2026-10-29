@@ -110,6 +110,11 @@ def build():
     eggs = strip_exports(strip_imports((ROOT / "js" / "eggs.js").read_text()))
     sfx = strip_exports(strip_imports((ROOT / "js" / "sfx.js").read_text()))
     mic = strip_exports(strip_imports((ROOT / "js" / "micro.js").read_text()))
+    # 部件小游戏四件套：离子塔防 / 点阵射击 / 声波冲浪 / 磁力迷阵（互相独立，仅依赖 three）
+    tur = strip_exports(strip_imports((ROOT / "js" / "turret.js").read_text()))
+    sht = strip_exports(strip_imports((ROOT / "js" / "shoot.js").read_text()))
+    wav = strip_exports(strip_imports((ROOT / "js" / "wave.js").read_text()))
+    maz = strip_exports(strip_imports((ROOT / "js" / "maze.js").read_text()))
     mod = strip_exports(strip_imports((ROOT / "js" / "model.js").read_text()))
     # main 里的 postprocessing 导入保留（走 importmap data URL），其余（three / 本地模块）删除
     main = strip_imports(
@@ -121,7 +126,8 @@ def build():
     merged = (
         "import * as THREE from 'three';\n"
         "import { OrbitControls } from 'three/addons/controls/OrbitControls.js';\n\n"
-        + tex + "\n" + tx_obj + "\n" + geo + "\n" + eggs + "\n" + sfx + "\n" + mic + "\n" + mod + "\n" + main
+        + tex + "\n" + tx_obj + "\n" + geo + "\n" + eggs + "\n" + sfx + "\n" + mic
+        + "\n" + tur + "\n" + sht + "\n" + wav + "\n" + maz + "\n" + mod + "\n" + main
     )
 
     importmap = {
