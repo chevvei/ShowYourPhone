@@ -68,12 +68,12 @@ try {
   await page.keyboard.press('Escape');
   f = await until(page, async () => (await fun(page)).zen === false);
 
-  // ③ 徽章墙：面板打开 · 计数 · 网格 12 项 · 已解锁高亮
+  // ③ 徽章墙：面板打开 · 计数 · 网格 14 项（12+微观世界 2 枚）· 已解锁高亮
   await page.click('#btnBadges');
   f = await until(page, async () => (await fun(page)).fifth.badgeN >= 5);
   ok('徽章面板打开', await page.evaluate(() => document.querySelector('#badges').classList.contains('on')));
-  ok('徽章计数文案 5/12', await page.evaluate(() => document.querySelector('#badgeCount').textContent === '5/12'));
-  ok('徽章网格 12 项', await page.evaluate(() => document.querySelectorAll('#badgeGrid .bd').length === 12));
+  ok('徽章计数文案 5/14', await page.evaluate(() => document.querySelector('#badgeCount').textContent === '5/14'));
+  ok('徽章网格 14 项', await page.evaluate(() => document.querySelectorAll('#badgeGrid .bd').length === 14));
   ok('已解锁徽章高亮 5 个', await page.evaluate(() => document.querySelectorAll('#badgeGrid .bd.got').length === 5));
   await page.click('#badgesClose');
   ok('Esc/关闭按钮收起徽章面板', await page.evaluate(() => !document.querySelector('#badges').classList.contains('on')));

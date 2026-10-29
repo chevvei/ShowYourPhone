@@ -10,6 +10,7 @@ import { buildPhone, buildPhone18 } from './model.js';
 import { P18, P18_STD, P18_MAX } from './geo.js';
 import { EGG_DEFS, eggsForDev, loadEggs, saveEggs, decodeEggImage, eggOpts } from './eggs.js';
 import { sfx, buzz, toggleSfx, sfxMuted } from './sfx.js';
+import { micro, mScene, mCam, openMicro, closeMicroUI, startMicroRun, tickMicro } from './micro.js';
 
 const $ = (s) => document.querySelector(s);
 const PI = Math.PI;
@@ -128,7 +129,8 @@ scene.add(hemi);
 // 后处理：UnrealBloom 泛光——常态只给屏幕高光一点辉光（阈值以上才生效，几乎无感），
 // 找齐全部隐藏细节后短暂增强，让虹彩中框 / 彩带 / 灵动岛流光“炸”开
 const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.18, 0.55, 0.9);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -319,12 +321,18 @@ canvas.addEventListener('pointermove', (e) => {
   mouseDirty = true;
 });
 canvas.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
+let zenTapT = 0;   // 沉浸模式轻点计时：350ms 内两击 = 双击退出（不依赖浏览器 dblclick 合成，触屏统一）
 canvas.addEventListener('pointerup', (e) => {
   if (!downAt || S.keynote) return;
   const moved = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]);
   downAt = null;
   if (moved > (e.pointerType === 'touch' ? 10 : 4)) return;
-  if (zen.on) { toggleZen(false); return; }   // 沉浸模式：轻点任意处退出
+  if (zen.on) {
+    const now = performance.now();
+    if (now - zenTapT < 350) { zenTapT = 0; toggleZen(false); }     // 双击退出沉浸
+    else { zenTapT = now; zenUI(!document.body.classList.contains('uiLive')); }   // 单击唤出/收起操作坞
+    return;
+  }
   mouse.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   pick();
   // 拆装挑战进行中：所有点击都交给装配逻辑（判对/判错），不走部件选择
@@ -341,7 +349,14 @@ canvas.addEventListener('pointerup', (e) => {
     }
   }
   selectPart(hovered ? hovered.id : null, false);
+  // 彩蛋入口：双击主板 → 电影化运镜钻进 A20 芯片，进入微观世界（电流竞速）
+  if (hovered && hovered.id === 'board') {
+    const now = performance.now();
+    if (now - boardTapT < 380) { boardTapT = 0; enterMicro(); }
+    else boardTapT = now;
+  }
 });
+let boardTapT = 0;
 // 爆炸态双击部件 = 弹飞：给它一个随机冲量，转几圈后自己飞回原位
 canvas.addEventListener('dblclick', (e) => {
   if (S.keynote || S.explode < 0.5 || phys.on) return;
@@ -487,6 +502,7 @@ function selectPart(id, fly) {
   $('#infoName').textContent = p.name;
   $('#infoEn').textContent = p.en;
   $('#infoSpec').textContent = p.spec;
+  $('#infoMicro').hidden = id !== 'board';   // 主板专属入口：深入芯片内部
   panel.classList.add('on');
   if (fly) {
     const go = async () => {
@@ -534,10 +550,17 @@ function bindUI() {
   $('#btnKeynote').onclick = () => startKeynote();
   $('#kExit').onclick = () => stopKeynote();
   $('#infoClose').onclick = () => selectPart(null);
+  // 芯片微观世界：主板信息卡入口 + 游戏内按钮 + 徽章事件（micro.js → award，单向解耦）
+  $('#infoMicro').onclick = () => enterMicro();
+  $('#gQuit').onclick = () => exitMicro();
+  $('#gExit').onclick = () => exitMicro();
+  $('#gRetry').onclick = () => startMicroRun();
+  addEventListener('micro-award', (e) => award(e.detail));
   document.querySelectorAll('#devTabs button').forEach((b) => (b.onclick = () => switchDevice(b.dataset.dev)));
   addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (S.keynote) stopKeynote();
+      if (micro.on) exitMicro();
+      else if (S.keynote) stopKeynote();
       else if (zen.on) toggleZen(false);
       else if ($('#custom').classList.contains('on')) $('#custom').classList.remove('on');
       else if (quiz.on) toggleQuiz(false);
@@ -1888,8 +1911,14 @@ function setCutDepth(k) {
   $('#cutDepth').value = Math.round(k * 100);
 }
 
-// 沉浸模式：UI 全隐 + 展台自转 + 全屏 API，点任意处或 Esc 退出
-const zen = { on: false, t: 0 };
+// 沉浸模式：UI 静止自动隐没 + 鼠标活动唤出（视频播放器心智）+ 双击/Esc 退出
+// 操作坞按钮在沉浸中照常可用——沉浸不牺牲操作，只牺牲干扰。
+const zen = { on: false, t: 0, live: 0, moveT: 0 };
+function zenUI(show) {
+  clearTimeout(zen.live);
+  document.body.classList.toggle('uiLive', show && zen.on);
+  if (show && zen.on) zen.live = setTimeout(() => document.body.classList.remove('uiLive'), 2500);
+}
 function toggleZen(force) {
   const want = force !== undefined ? force : !zen.on;
   if (want === zen.on) return;
@@ -1900,14 +1929,89 @@ function toggleZen(force) {
     sfx('whoosh'); buzz(10);
     award('zen');
     document.documentElement.requestFullscreen?.().catch(() => {});
+    zenUI(true);                                // 进场先亮 UI，随提示一起隐没——演示「会自己消失」
     const tip = $('#zenTip');
     tip.classList.add('on');
     clearTimeout(zen.t);
     zen.t = setTimeout(() => tip.classList.remove('on'), 3400);
-  } else if (document.fullscreenElement) {
-    document.exitFullscreen().catch(() => {});
+  } else {
+    zenUI(false);
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
 }
+
+// ---------------- 芯片微观世界：进出场的电影化序列 ----------------
+// 进入：收面板 → 飞向主板 → 持续推进“穿过”芯片表面（白闪遮衔接）→ 切 Scene 开跑
+// 渲染复用：同一 composer，仅切 RenderPass 的 scene/camera；bloom 调强（游戏全是发光体）
+let microBusy = false;
+async function enterMicro() {
+  if (micro.on || microBusy) return;
+  microBusy = true;
+  try {
+    if (zen.on) toggleZen(false);
+    selectPart(null);
+    toggleBadges(false); toggleDaily(false); toggleQuiz(false);
+    sfx('whoosh'); buzz(10);
+    cancelTweens();
+    // 1) 收拢整机：合上折叠、收回爆炸，让主板归位
+    if (S.fold > 0.01) await animFold(0, 1.0);
+    if (S.explode > 0.01) await animExplode(0, 0.9);
+    model.update(0); stage.updateMatrixWorld(true);
+    // 2) 找到主板上的芯片锚点，飞过去
+    const bp = model.parts.find((q) => q.id === 'board');
+    const c = bp.anchorObj.localToWorld(bp.anchor.clone());
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    await flyTo(c.clone().addScaledVector(dir, 130).toArray(), c.toArray(), 1.7);
+    // 3) 持续推进——穿过芯片表面（推进到 55% 时白闪接管衔接）
+    const p0 = camera.position.clone(), t0 = controls.target.clone();
+    let flashed = false;
+    await tween(1.5, (k) => {
+      camera.position.lerpVectors(p0, c, k);
+      controls.target.lerpVectors(t0, c, Math.min(k * 1.6, 1));
+      if (!flashed && k > 0.55) { flashed = true; $('#flash').classList.add('on'); }
+    }, ease.in);
+    // 4) 白屏峰值处切换世界（openMicro 内部 buildMicro 创建 mScene/mCam，之后再接管 RenderPass——
+    //    live binding 更新变量，但已赋给 renderPass 的 null 不会跟着变，顺序反了会每帧崩）
+    openMicro();                                  // HUD + 开场字幕 + 倒计时 + 微章
+    renderPass.scene = mScene; renderPass.camera = mCam;
+    bloom.strength = 0.85; bloom.threshold = 0.5;
+    await sleepMs(140);
+    $('#flash').classList.remove('on');
+  } finally { microBusy = false; }
+}
+window.__enterMicro = enterMicro;   // 测试探针：直接触发进入序列，抓真实异常
+// 退出：白闪 → 回主场景 → 相机从芯片前“退出来”，再拉回默认视角
+async function exitMicro() {
+  if (!micro.on || microBusy) return;
+  microBusy = true;
+  try {
+    sfx('whoosh');
+    $('#flash').classList.add('on');
+    await sleepMs(340);
+    closeMicroUI();
+    renderPass.scene = scene; renderPass.camera = camera;
+    bloom.strength = 0.18; bloom.threshold = 0.9;
+    // 相机落在主板前方，然后拉回全局视角（像从芯片里退了出来）
+    model.update(0); stage.updateMatrixWorld(true);
+    const bp = model.parts.find((q) => q.id === 'board');
+    const c = bp.anchorObj.localToWorld(bp.anchor.clone());
+    camera.position.copy(c).add(new THREE.Vector3(60, 40, 120));
+    controls.target.copy(c);
+    controls.update();
+    await sleepMs(120);
+    $('#flash').classList.remove('on');
+    flyTo([-260, 120, 300], [0, 0, 0], 1.8);
+  } finally { microBusy = false; }
+}
+// 沉浸中鼠标/触摸活动 → 唤出操作坞（已显示时低频刷新静止计时）
+addEventListener('pointermove', (e) => {
+  if (!zen.on || e.pointerType === 'touch') return;
+  const now = performance.now();
+  const shown = document.body.classList.contains('uiLive');
+  if (shown && now - zen.moveT < 200) return;
+  zen.moveT = now;
+  zenUI(true);
+}, { passive: true });
 // 用户直接 Esc 退全屏（浏览器手势）时同步状态，防止「半沉浸」残留
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && zen.on) toggleZen(false); });
 
@@ -1947,7 +2051,9 @@ const BADGES = [
   { id: 'daily1', ic: '☀',  nm: '每日打卡',   ds: '完成一次每日挑战' },
   { id: 'daily7', ic: '🔥', nm: '七日之约',   ds: '每日挑战连续打卡 7 天' },
   { id: 'wall',   ic: '🖼', nm: '壁纸收藏家', ds: '导出一张机型原生壁纸' },
-  { id: 'share',  ic: '⇗',  nm: '分享家',     ds: '生成一条分享链接' },
+  { id: 'share',  ic: '⇗', nm: '分享家',     ds: '生成一条分享链接' },
+  { id: 'micro',  ic: '⚛', nm: '微观访客',   ds: '深入 A20 芯片内部一次' },
+  { id: 'racer',  ic: '⚡', nm: '超频骑手',   ds: '电流竞速单局拿下 2000 分' },
 ];
 let badgeStore = {};
 try { badgeStore = JSON.parse(localStorage.getItem('iphoneDuo.badges') || '{}'); } catch { /* 损坏则重建 */ }
@@ -2274,6 +2380,14 @@ window.__fun = () => ({
   asm: { on: asm.on, left: asm.queue.length, done: asm.done, total: asm.total, next: asm.queue[0] || null, nextName: model.parts.find((p) => p.id === asm.queue[0])?.name },
   phys: phys.on, rec: rec.on, ar: ar.on, wallW: DEV().screens[DEV().tabs[0][0]][0],
   bg: scene.background ? '#' + scene.background.getHexString() : null, grid: bpGrid.visible,
+  rpass: renderPass.scene === scene && renderPass.camera === camera,   // e2e：微观退出后渲染管线已切回主场景
+  micro: {
+    on: micro.on, run: micro.run, over: micro.over,
+    score: micro.score, lives: micro.lives, combo: micro.combo, speed: Math.round(micro.speed),
+    best: micro.best, gotE: micro.gotE,
+    gameOn: $('#game').classList.contains('on'),
+    overOn: document.querySelector('#gOver').classList.contains('on'),
+  },
   fifth: {
     dev: CUR,
     badgeN: Object.keys(badgeStore).filter((k) => BADGES.some((b) => b.id === k)).length,
@@ -2302,6 +2416,13 @@ let fpsAcc = 0, fpsN = 0;
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
   runTweens(dt);
+  // 微观世界：独立分支——游戏 tick + 直接出图（controls/模型/物理全部挂起）
+  if (micro.on) {
+    tickMicro(dt);
+    composer.render();
+    requestAnimationFrame(frame);
+    return;
+  }
   controls.autoRotate = (S.auto || zen.on) && !S.keynote;   // 沉浸模式 = 展台自转
   controls.update();
 

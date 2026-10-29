@@ -104,29 +104,43 @@ try {
   });
   ok('材质探针仍可用', !!clipCleared);
 
-  // ⑧ 沉浸模式：body.zen + UI 隐没 + 展台自转
+  // ⑧ 沉浸模式：body.zen + 进场亮 UI → 静止隐没 → 活动唤回
   await page.keyboard.press('i');
   f = await until(page, async () => (await fun(page)).zen === true);
   ok('I 键进入沉浸 zen=true', !!f);
   ok('body.zen 挂载', await page.evaluate(() => document.body.classList.contains('zen')));
+  ok('进场操作坞亮起（uiLive）', await page.evaluate(() => document.body.classList.contains('uiLive')));
   const dockOpacity = await until(page, async () => {
     const o = await page.evaluate(() => getComputedStyle(document.querySelector('#dock')).opacity);
-    return o === '0' ? o : null;   // 等过渡完成
-  });
-  ok('沉浸 UI 隐没（dock opacity=0）', dockOpacity === '0', `opacity=${dockOpacity}`);
+    return o === '0' ? o : null;   // 等静止 2.5s + 过渡完成
+  }, 15000);
+  ok('静止后 UI 隐没（dock opacity=0）', dockOpacity === '0', `opacity=${dockOpacity}`);
   const autoRot = await page.evaluate(() => document.querySelector('#btnZen').classList.contains('active'));
   ok('沉浸按钮高亮', autoRot);
+  // 鼠标活动 → 操作坞唤回（沉浸中可操作，不退出）
+  await page.mouse.move(700, 500);
+  f = await until(page, async () => page.evaluate(() => getComputedStyle(document.querySelector('#dock')).opacity === '1'));
+  ok('鼠标活动唤回操作坞', !!f);
+  f = await until(page, async () => (await fun(page)).zen === true);
+  ok('操作中不退出沉浸', !!f);
   await page.keyboard.press('Escape');
   f = await until(page, async () => (await fun(page)).zen === false);
   ok('Esc 退出沉浸', !!f);
 
-  // ⑨ 沉浸模式：轻点画面退出
+  // ⑨ 沉浸模式：轻点翻转 UI（不退出）· 双击退出
   await page.keyboard.press('i');
   f = await until(page, async () => (await fun(page)).zen === true);
   ok('再次进入沉浸', !!f);
-  await page.mouse.move(720, 450); await page.mouse.down(); await page.mouse.up();   // 轻点画布中心
+  await until(page, async () => page.evaluate(() => document.body.classList.contains('uiLive') === false), 15000);  // 等初始 UI 隐没
+  await page.mouse.down(); await page.mouse.up();   // 轻点（鼠标已在画布上，不动）→ 唤出
+  f = await until(page, async () => page.evaluate(() => document.body.classList.contains('uiLive')));
+  ok('轻点唤出操作坞（不退出）', !!(f && (await fun(page)).zen === true));
+  await page.mouse.down(); await page.mouse.up();   // 再轻点 → 收起
+  f = await until(page, async () => page.evaluate(() => document.body.classList.contains('uiLive') === false));
+  ok('再轻点收起操作坞', !!f);
+  await page.mouse.down(); await page.mouse.up(); await page.mouse.down(); await page.mouse.up();   // 双击
   f = await until(page, async () => (await fun(page)).zen === false);
-  ok('轻点画面退出沉浸', !!f);
+  ok('双击退出沉浸', !!f);
 
   // ⑩ 分享链接：环境/爆炸度编码进 URL
   f = await until(page, async () => {

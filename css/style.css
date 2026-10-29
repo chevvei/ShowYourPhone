@@ -428,6 +428,10 @@ body.zen #labels, body.zen #eggs, body.zen #eggBadge, body.zen #tip, body.zen #t
 body.zen #quiz, body.zen #asm, body.zen #custom, body.zen #kbar, body.zen #kctrl {
   opacity: 0 !important; pointer-events: none !important;
 }
+/* 沉浸中鼠标/触摸活动 → 操作坞浮现（视频播放器心智）：按钮保留、随时可操作，静止 2.5s 归隐 */
+body.zen.uiLive #dock {
+  opacity: 1 !important; pointer-events: auto !important;
+}
 #zenTip {
   position: fixed; left: 50%; top: 26px; transform: translateX(-50%);
   padding: 8px 18px; border-radius: 999px; font-size: 12.5px; letter-spacing: .04em;
@@ -437,6 +441,43 @@ body.zen #quiz, body.zen #asm, body.zen #custom, body.zen #kbar, body.zen #kctrl
 }
 #zenTip.on { opacity: 1; transition: opacity .3s; }
 body:not(.zen) #zenTip { display: none; }
+
+/* ---------------- 芯片微观世界 · 电流竞速 ---------------- */
+#infoMicro { margin-top: 12px; padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 500;
+  background: linear-gradient(135deg, #2b6fff, #00d4ff); color: #fff; letter-spacing: .02em; transition: filter .2s; }
+#infoMicro:hover { filter: brightness(1.15); }
+#game { position: fixed; inset: 0; z-index: 40; display: none; }
+#game.on { display: block; }
+#gHud { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); display: flex; gap: 26px;
+  padding: 10px 26px; border-radius: 16px; background: rgba(8, 12, 24, 0.5); border: 1px solid rgba(120, 200, 255, 0.18);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: opacity .5s; }
+#gHud .gCol { display: flex; flex-direction: column; align-items: center; min-width: 52px; }
+#gHud b { font-size: 19px; font-variant-numeric: tabular-nums; color: #9fe0ff; text-shadow: 0 0 14px rgba(80, 180, 255, .6); }
+#gHud #gScore { color: #ffd76a; text-shadow: 0 0 14px rgba(255, 200, 80, .55); }
+#gHud span { font-size: 10px; color: rgba(160, 200, 230, .55); letter-spacing: .12em; margin-top: 2px; }
+#gMsg { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;
+  font-size: 30px; font-weight: 700; letter-spacing: .14em; color: #dff2ff; text-shadow: 0 0 30px rgba(90, 190, 255, .8); opacity: 0; transition: opacity .4s; white-space: pre-line; }
+#gMsg.on { opacity: 1; }
+#gMsg small { display: block; font-size: 13px; font-weight: 400; letter-spacing: .22em; color: rgba(170, 210, 240, .75); margin-top: 12px; }
+#gQuit { position: absolute; top: 18px; right: 18px; width: 38px; height: 38px; border-radius: 12px; font-size: 15px;
+  background: rgba(8, 12, 24, 0.5); border: 1px solid rgba(120, 200, 255, 0.2); color: #bfe0f5; backdrop-filter: blur(12px); transition: background .2s; }
+#gQuit:hover { background: rgba(80, 140, 200, 0.35); }
+#gOver { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.92); width: min(400px, 86vw); text-align: center;
+  padding: 34px 30px 26px; border-radius: 22px; background: rgba(10, 14, 26, 0.78); border: 1px solid rgba(120, 200, 255, 0.22);
+  backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); opacity: 0; pointer-events: none; transition: opacity .5s, transform .5s; }
+#gOver.on { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+#gOver h2 { font-size: 24px; letter-spacing: .18em; color: #ff9f9f; text-shadow: 0 0 24px rgba(255, 110, 110, .5); }
+#gStats { margin: 18px 0 22px; font-size: 14px; line-height: 2; color: #cfe6f5; font-variant-numeric: tabular-nums; }
+#gStats b { color: #ffd76a; }
+#gOver button { margin: 0 6px; padding: 11px 22px; border-radius: 12px; font-size: 14px; font-weight: 500; letter-spacing: .04em; transition: filter .2s, background .2s; }
+#gRetry { background: linear-gradient(135deg, #2b6fff, #00d4ff); color: #fff; }
+#gExit { background: rgba(255, 255, 255, 0.09); border: 1px solid var(--line); color: #cfe0ee; }
+#gOver button:hover { filter: brightness(1.15); }
+#gTouch { position: absolute; inset: auto 0 0 0; height: 34%; display: none; justify-content: space-between; align-items: flex-end; padding: 0 4vw 5vh; pointer-events: none; }
+#gTouch span { font-size: 40px; color: rgba(160, 210, 240, 0.4); text-shadow: 0 0 20px rgba(80, 170, 255, .4); }
+body.mobile #game.on:not(.over) #gTouch { display: flex; }
+#flash { position: fixed; inset: 0; z-index: 60; background: #eaf6ff; opacity: 0; pointer-events: none; transition: opacity .55s; }
+#flash.on { opacity: 1; transition: opacity .3s; }
 
 /* ---------------- 每日挑战 / 徽章墙 / 换色 DIY 面板 ---------------- */
 #daily, #badges, #tint {

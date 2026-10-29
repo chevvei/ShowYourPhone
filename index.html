@@ -56,6 +56,7 @@
     <h2 id="infoName"></h2>
     <div id="infoEn"></div>
     <p id="infoSpec"></p>
+    <button id="infoMicro" hidden>⚛ 深入芯片内部</button>
   </section>
 
   <footer id="dock">
@@ -90,7 +91,7 @@
       <button id="btnXray" title="X 光透视：外壳半透明，内部结构线框发光 (X)">⊨ X光</button>
       <button id="btnBlue" title="工程蓝图模式：青色线框 + 网格背景 (B)">⧉ 蓝图</button>
       <button id="btnCut" title="剖面切面：沿深度切开看内部堆叠 (C)">∪ 剖面</button>
-      <button id="btnZen" title="沉浸模式：全屏纯净画面 + 展台自转 (I)">⛶ 沉浸</button>
+      <button id="btnZen" title="沉浸模式：全屏纯净画面，动一下唤出操作坞 (I)">⛶ 沉浸</button>
       <button id="btnShare" title="复制分享链接：打开即还原当前设备/环境/爆炸度">⇗ 分享</button>
       <button id="btnDaily" title="每日挑战：每天 5 题，答对 3 题打卡，连续记录">☀ 每日</button>
       <button id="btnBadges" title="图鉴徽章：探索成就墙">♛ 徽章</button>
@@ -224,7 +225,28 @@
   <!-- 剖面切面控制条：开启剖面后浮在底部中央 -->
   <div id="cutBar"><span>∪ 剖面深度</span><input id="cutDepth" type="range" min="0" max="100" value="35" step="1" /><b id="cutPct">35%</b></div>
   <!-- 沉浸模式退出提示：进入后短暂显示，静置淡出 -->
-  <div id="zenTip">⛶ 沉浸模式 · 点击任意处或按 Esc 退出</div>
+  <div id="zenTip">⛶ 沉浸模式 · 动一下唤出操作 · 双击或 Esc 退出</div>
+
+  <!-- 芯片微观世界 · 电流竞速：全屏游戏层（独立 scene 渲染） -->
+  <section id="game">
+    <div id="gHud">
+      <div class="gCol"><b id="gScore">0</b><span>分数</span></div>
+      <div class="gCol"><b id="gCombo">×1</b><span>连击</span></div>
+      <div class="gCol"><b id="gLives">⚡⚡⚡</b><span>电荷</span></div>
+      <div class="gCol"><b id="gSpeed">0</b><span>速率</span></div>
+    </div>
+    <div id="gMsg"></div>
+    <button id="gQuit" title="退出微观世界 (Esc)">✕</button>
+    <div id="gOver">
+      <h2>信号中断</h2>
+      <div id="gStats"></div>
+      <button id="gRetry">↻ 再来一局</button>
+      <button id="gExit">⌂ 返回工坊</button>
+    </div>
+    <div id="gTouch"><span>◁</span><span>▷</span></div>
+  </section>
+  <!-- 微观世界进出场的白闪过渡层 -->
+  <div id="flash"></div>
 
   <!-- 每日挑战：日期种子固定 5 题，答对 3 题打卡 -->
   <section id="daily">

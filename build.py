@@ -29,8 +29,8 @@ def strip_imports(src, keep=None):
     while i < len(lines):
         if re.match(r"^import\b", lines[i]):
             stmt = [lines[i]]
-            # 收集到语句结束（块尾的 } from '...'; 或单行 ... from '...';）
-            while i < len(lines) and not re.search(r"from\s*['\"].*['\"]\s*;?\s*$", lines[i]):
+            # 收集到语句结束（块尾的 } from '...'; 或单行 ... from '...';，允许行尾注释）
+            while i < len(lines) and not re.search(r"from\s*['\"].*['\"]\s*;?\s*(//.*)?$", lines[i]):
                 i += 1
                 if i < len(lines):
                     stmt.append(lines[i])
@@ -45,8 +45,8 @@ def strip_imports(src, keep=None):
 
 
 def strip_exports(src):
-    """剥掉顶层 `export function/const/let/class` 前缀（名字保留在同作用域）。"""
-    return re.sub(r"^export\s+(?=(function|const|let|class)\b)", "", src, flags=re.M)
+    """剥掉顶层 `export [async] function/const/let/class` 前缀（名字保留在同作用域）。"""
+    return re.sub(r"^export\s+(?=(async\s+)?(function|const|let|class)\b)", "", src, flags=re.M)
 
 
 def tex_exports(src):
@@ -109,6 +109,7 @@ def build():
     geo = strip_exports(strip_imports((ROOT / "js" / "geo.js").read_text()))
     eggs = strip_exports(strip_imports((ROOT / "js" / "eggs.js").read_text()))
     sfx = strip_exports(strip_imports((ROOT / "js" / "sfx.js").read_text()))
+    mic = strip_exports(strip_imports((ROOT / "js" / "micro.js").read_text()))
     mod = strip_exports(strip_imports((ROOT / "js" / "model.js").read_text()))
     # main 里的 postprocessing 导入保留（走 importmap data URL），其余（three / 本地模块）删除
     main = strip_imports(
@@ -120,7 +121,7 @@ def build():
     merged = (
         "import * as THREE from 'three';\n"
         "import { OrbitControls } from 'three/addons/controls/OrbitControls.js';\n\n"
-        + tex + "\n" + tx_obj + "\n" + geo + "\n" + eggs + "\n" + sfx + "\n" + mod + "\n" + main
+        + tex + "\n" + tx_obj + "\n" + geo + "\n" + eggs + "\n" + sfx + "\n" + mic + "\n" + mod + "\n" + main
     )
 
     importmap = {
