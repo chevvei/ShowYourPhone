@@ -373,53 +373,88 @@ canvas.addEventListener('dblclick', (e) => {
   kickPart(hovered.id);
 });
 
-// 移动端：右半屏轻点出控制坞，静置 5 秒自动收起；部件栏改为左缘拉手手动拉出（见下）
+// 移动端：任意触碰短暂亮出顶栏/信息卡（5 秒隐没）；两侧面板一律由侧缘拉手手动拉出（见下）
 let uiTimer = 0;
 function pokeUI(e) {
   if (!document.body.classList.contains('mobile') || S.keynote || zen.on) return;
   document.body.classList.add('ui', 'touched');
-  // 右半屏轻点出控制坞；部件抽屉（uiL）只由左缘拉手手动唤出，不跟半屏轻点弹出
-  if (e && e.clientX !== undefined) document.body.classList.toggle('uiR', e.clientX > innerWidth * 0.5);
   clearTimeout(uiTimer);
-  uiTimer = setTimeout(() => document.body.classList.remove('ui', 'uiR'), 5000);
+  uiTimer = setTimeout(() => document.body.classList.remove('ui'), 5000);
 }
 for (const ev of ['pointerdown', 'touchstart', 'input']) addEventListener(ev, pokeUI, { capture: true, passive: true });
 for (const el of ['#parts', '#dock']) $(el).addEventListener('scroll', pokeUI, { passive: true });
 
-// —— 部件抽屉（手机端）：左缘拉手点击 / 侧滑拉出，点抽屉外或左滑收起，全程手动不自动收 ——
-// 桌面端屏幕大，侧栏与底栏常驻显示，不再做贴边悬停自动隐藏
+// —— 手机端两侧缘拉手：轻点 或 按住跟手拖出（拖过阈值松手=开，否则弹回）；桌面端侧栏常驻无需拉手 ——
 let sbGuideT = 0;
-const sbOpen = (v) => {
-  document.body.classList.toggle('uiL', v);
-  if (v) {
-    clearTimeout(sbGuideT);
-    document.body.classList.remove('nudge');
-    $('#sbGuide').classList.remove('on');
-  }
+const hideSbGuide = () => { clearTimeout(sbGuideT); document.body.classList.remove('nudge'); $('#sbGuide').classList.remove('on'); };
+const drawerOpen = (side, v) => {                     // side: 'uiL'（部件抽屉）| 'uiR'（控制坞）
+  document.body.classList.toggle(side, v);
+  if (v) { document.body.classList.remove(side === 'uiL' ? 'uiR' : 'uiL'); hideSbGuide(); }   // 小屏一次只开一侧
 };
 const showSbGuide = () => {
   if (!document.body.classList.contains('mobile')) return;
   document.body.classList.add('nudge');
   $('#sbGuide').classList.add('on');
   clearTimeout(sbGuideT);
-  sbGuideT = setTimeout(() => { document.body.classList.remove('nudge'); $('#sbGuide').classList.remove('on'); }, 8000);
+  sbGuideT = setTimeout(hideSbGuide, 8000);
 };
-$('#sbEdge').addEventListener('click', () => sbOpen(true));
-let sbX0 = null;
-$('#sbEdge').addEventListener('pointerdown', (e) => { sbX0 = e.clientX; }, { passive: true });
-addEventListener('pointermove', (e) => { if (sbX0 !== null && e.clientX - sbX0 > 36) { sbX0 = null; sbOpen(true); } }, { passive: true });
+const bindEdgePull = (stripSel, panelSel, side) => {
+  const strip = $(stripSel), panel = $(panelSel);
+  const dir = side === 'uiL' ? 1 : -1;                // 左缘向右拖开 / 右缘向左拖开
+  let x0 = null, y0 = 0, dragging = false, lastDx = 0, suppressClick = false;
+  strip.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    x0 = e.clientX; y0 = e.clientY; dragging = false; lastDx = 0;
+    try { strip.setPointerCapture(e.pointerId); } catch { /* 合成事件/旧浏览器无捕获 */ }
+  });
+  strip.addEventListener('pointermove', (e) => {
+    if (x0 === null) return;
+    const dx = (e.clientX - x0) * dir;
+    if (!dragging && dx > 8 && Math.abs(e.clientY - y0) < 40) dragging = true;   // 横向意图明确才算拖拽
+    if (!dragging) return;
+    lastDx = Math.max(0, dx);
+    panel.classList.add('pull');                       // 面板跟手：CSS 变量实时位移
+    panel.style.setProperty('--pull', Math.min(lastDx, panel.offsetWidth + 20) + 'px');
+  }, { passive: true });
+  strip.addEventListener('touchmove', (e) => { if (dragging) e.preventDefault(); }, { passive: false });   // 拦截 iOS 边缘返回等系统手势
+  const settle = () => {
+    if (x0 === null) return;
+    if (dragging) {
+      panel.classList.remove('pull');
+      panel.style.removeProperty('--pull');
+      drawerOpen(side, lastDx > 64);                   // 拖过阈值=开，否则弹回
+      suppressClick = true; setTimeout(() => (suppressClick = false), 400);   // 拖拽松手后的 click 不再触发开
+    }
+    x0 = null; dragging = false; lastDx = 0;
+  };
+  strip.addEventListener('pointerup', settle);
+  strip.addEventListener('pointercancel', settle);
+  strip.addEventListener('click', () => { if (!suppressClick) drawerOpen(side, true); });   // 轻点拉手直接开
+};
+bindEdgePull('#sbEdge', '#parts', 'uiL');
+bindEdgePull('#dockEdge', '#dock', 'uiR');
 // 抽屉打开时点到抽屉外任意处 → 收起（拉手 / 面板本体 / 顶部栏 / 信息卡不算「外」）
 addEventListener('pointerdown', (e) => {
-  if (!document.body.classList.contains('mobile') || !document.body.classList.contains('uiL')) return;
-  if (!e.target.closest('#parts,#sbEdge,#sbGuide,#top,#info')) sbOpen(false);
+  if (!document.body.classList.contains('mobile')) return;
+  const L = document.body.classList.contains('uiL'), R = document.body.classList.contains('uiR');
+  if (!L && !R) return;
+  if (!e.target.closest('#parts,#dock,#sbEdge,#dockEdge,#sbGuide,#top,#info')) {
+    if (L) drawerOpen('uiL', false);
+    if (R) drawerOpen('uiR', false);
+  }
 }, true);
-// 抽屉上快速左滑 → 收起（与列表纵向滚动区分：横向位移大、纵向位移小）
-let sbCX = null, sbCY = 0;
-$('#parts').addEventListener('pointerdown', (e) => { sbCX = e.clientX; sbCY = e.clientY; }, { passive: true });
+// 面板上向外快速滑动 → 收起（与列表纵向滚动区分：横向位移大、纵向位移小）
+let dwX = null, dwY = 0;
+for (const sel of ['#parts', '#dock']) $(sel).addEventListener('pointerdown', (e) => { dwX = e.clientX; dwY = e.clientY; }, { passive: true });
 addEventListener('pointermove', (e) => {
-  if (sbCX !== null && sbCX - e.clientX > 48 && Math.abs(e.clientY - sbCY) < 30) { sbCX = null; sbOpen(false); }
+  if (dwX === null) return;
+  const dx = e.clientX - dwX;
+  if (Math.abs(e.clientY - dwY) < 30 && Math.abs(dx) > 48) {
+    dwX = null;
+    drawerOpen(dx < 0 ? 'uiL' : 'uiR', false);         // 部件抽屉左滑收 / 控制坞右滑收
+  }
 }, { passive: true });
-for (const ev of ['pointerup', 'pointercancel']) addEventListener(ev, () => { sbX0 = null; sbCX = null; }, { passive: true });
+addEventListener('pointerup', () => { dwX = null; }, { passive: true });
 
 let lastHit = null;   // 最近一次射线命中（pointerup 用它的 uv 做屏幕内交互）
 // 盖板玻璃 → 屏幕 穿透表：玻璃盒体挡在屏幕前且自身 UV 无意义，

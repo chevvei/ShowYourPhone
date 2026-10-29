@@ -74,7 +74,7 @@ try {
   const fx = await page.evaluate(() => JSON.parse(localStorage.getItem('iphoneDuo.eggs') || '{}').fx);
   console.log(`[egg] fx 持久化: ${fx === true ? 'OK' : 'FAIL'}`);
 
-  // ---- 移动端仿真：部件抽屉改为左缘拉手手动拉出 + 进场引导；控制坞仍是右半屏轻点 ----
+  // ---- 移动端仿真：两侧面板均由左/右缘拉手手动拉出（轻点或跟手拖拽）+ 进场引导 ----
   await page.emulate({
     viewport: { width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
     userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
@@ -86,32 +86,58 @@ try {
   await new Promise((r) => setTimeout(r, 600));
   const isMobileBody = await page.evaluate(() => document.body.classList.contains('mobile'));
   const tap = async (x, y) => { await page.touchscreen.tap(x, y); await new Promise((r) => setTimeout(r, 500)); };
-  // 进场引导：拉手浮现 + 气泡提示（8 秒后自动淡出）
+  // 合成拖拽：在拉手上 pointerdown → 横向 pointermove → pointerup（真实触屏路径）
+  const edgeDrag = (sel, x0, x1) => page.evaluate((sel, x0, x1) => {
+    const el = document.querySelector(sel);
+    const opt = (x) => ({ clientX: x, clientY: 400, pointerId: 9, pointerType: 'touch', bubbles: true, isPrimary: true });
+    el.dispatchEvent(new PointerEvent('pointerdown', opt(x0)));
+    el.dispatchEvent(new PointerEvent('pointermove', opt(x1)));
+    el.dispatchEvent(new PointerEvent('pointerup', opt(x1)));
+  }, sel, x0, x1);
+  // 进场引导：两侧拉手浮现 + 气泡提示（8 秒后自动淡出）
   let guide = await page.evaluate(() => document.querySelector('#sbGuide').classList.contains('on')
     && document.body.classList.contains('nudge'));
   console.log(`[ui] 手机进场引导浮现: ${guide ? 'OK' : 'FAIL'} (mobile=${isMobileBody})`);
   await page.screenshot({ path: '/tmp/egg_mobile_guide.png' });
-  await tap(10, 400);   // 左缘拉手 → 拉出部件抽屉
+  await tap(10, 400);   // 左缘拉手轻点 → 拉出部件抽屉
   let side = await page.evaluate(() => ({
     L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR'),
     g: document.querySelector('#sbGuide').classList.contains('on'),
   }));
-  console.log(`[ui] 左缘拉手拉出部件抽屉: ${side.L && !side.R && !side.g ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
+  console.log(`[ui] 左缘拉手轻点拉出抽屉: ${side.L && !side.R && !side.g ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
   await page.screenshot({ path: '/tmp/egg_mobile_drawer.png' });
-  await tap(330, 400);  // 点抽屉外 → 收起抽屉（同时右半屏出控制坞）
+  await tap(330, 400);  // 点抽屉外 → 收起抽屉
   side = await page.evaluate(() => ({ L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR') }));
-  console.log(`[ui] 点抽屉外收起: ${!side.L ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
-  await tap(60, 400);   // 左半屏普通点按：不再弹出部件栏（新交互：只认左缘拉手）
-  side = await page.evaluate(() => document.body.classList.contains('uiL'));
-  console.log(`[ui] 左半屏点按不再弹抽屉: ${!side ? 'OK' : 'FAIL'}`);
-  await tap(330, 400);  // 右半屏 → 控制坞
+  console.log(`[ui] 点抽屉外收起: ${!side.L && !side.R ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
+  // 跟手拖拽：左缘拖 100px 松手 → 开；只拖 30px 松手 → 弹回
+  await edgeDrag('#sbEdge', 6, 106);
   side = await page.evaluate(() => ({ L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR') }));
-  console.log(`[ui] 手机右半屏=控制坞: ${side.R && !side.L ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
+  console.log(`[ui] 左缘拖拽拉出抽屉: ${side.L ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
+  await tap(330, 400);  // 收起
+  await edgeDrag('#sbEdge', 6, 36);
+  side = await page.evaluate(() => ({ L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR'), p: document.querySelector('#parts').classList.contains('pull') }));
+  console.log(`[ui] 未过阈值拖拽弹回: ${!side.L && !side.R && !side.p ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
+  // 右缘拉手：轻点开控制坞；拖拽也开；点外收起
+  await tap(379, 400);
+  side = await page.evaluate(() => ({ L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR') }));
+  console.log(`[ui] 右缘拉手轻点出控制坞: ${side.R && !side.L ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
   await page.screenshot({ path: '/tmp/egg_mobile_right.png' });
-  await new Promise((r) => setTimeout(r, 5600));   // 静置：控制坞 5s 自动收起，抽屉不自动收
-  const gone = await page.evaluate(() => !document.body.classList.contains('uiR'));
-  console.log(`[ui] 手机控制坞 5s 自动收起: ${gone ? 'OK' : 'FAIL'}`);
-  await tap(10, 400);   // 再次拉出抽屉 → 静置验证：手动抽屉不会被超时收起
+  await tap(60, 400);   // 点控制坞外 → 收起
+  side = await page.evaluate(() => document.body.classList.contains('uiR'));
+  console.log(`[ui] 点控制坞外收起: ${!side ? 'OK' : 'FAIL'}`);
+  await edgeDrag('#dockEdge', 384, 284);
+  side = await page.evaluate(() => ({ L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR') }));
+  console.log(`[ui] 右缘拖拽拉出控制坞: ${side.R && !side.L ? 'OK' : `FAIL ${JSON.stringify(side)}`}`);
+  await tap(60, 400);   // 收起还原
+  // 半屏点按不再弹面板（新交互：只认两侧拉手）
+  await tap(60, 400);
+  side = await page.evaluate(() => ({ L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR') }));
+  console.log(`[ui] 左半屏点按不再弹抽屉: ${!side.L ? 'OK' : 'FAIL'}`);
+  await tap(330, 400);
+  side = await page.evaluate(() => ({ L: document.body.classList.contains('uiL'), R: document.body.classList.contains('uiR') }));
+  console.log(`[ui] 右半屏点按不再弹控制坞: ${!side.R ? 'OK' : 'FAIL'}`);
+  // 手动面板不会被超时收起
+  await tap(10, 400);
   await new Promise((r) => setTimeout(r, 5600));
   const stay = await page.evaluate(() => document.body.classList.contains('uiL'));
   console.log(`[ui] 抽屉手动收起不自动: ${stay ? 'OK' : 'FAIL'}`);
